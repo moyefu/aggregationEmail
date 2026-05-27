@@ -7,11 +7,11 @@ services:
       - "3000:3000"
       - "2525:2525"
     environment:
-      - DATABASE_URL=file:./data/prod.db
+      - DATABASE_URL=${DATABASE_URL:-file:./data/prod.db}
       - JWT_SECRET=${JWT_SECRET:-your-jwt-secret-change-in-production}
       - ENCRYPTION_KEY=${ENCRYPTION_KEY:-your-32-character-encryption-key}
       - SMTP_HOST=0.0.0.0
-      - SMTP_PORT=2525
+      - SMTP_PORT=${SMTP_PORT:-2525}
       - SITE_SMTP_HOST=${SITE_SMTP_HOST}
       - SITE_SMTP_PORT=${SITE_SMTP_PORT}
       - SITE_SMTP_USER=${SITE_SMTP_USER}
