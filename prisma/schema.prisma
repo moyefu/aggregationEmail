@@ -4,7 +4,7 @@ generator client {
 }
 
 datasource db {
-  provider = "mysql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -57,7 +57,7 @@ model EmailAccount {
   smtpHost     String
   smtpPort     Int
   smtpUser     String
-  smtpPassword String     @db.Text
+  smtpPassword String
   fromEmail    String
   fromName     String?
   isVerified   Boolean    @default(false)
