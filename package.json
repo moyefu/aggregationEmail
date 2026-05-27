@@ -1,0 +1,56 @@
+{
+  "name": "aggregation-email",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "tsx scripts/start.ts",
+    "start:web": "next start",
+    "start:smtp": "tsx scripts/start-smtp.ts",
+    "db:sync": "prisma db push",
+    "db:generate": "prisma generate",
+    "db:seed": "tsx prisma/seed.ts",
+    "generate:cert": "powershell -ExecutionPolicy Bypass -File scripts/generate-cert.ps1",
+    "lint": "eslint",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "docker:build": "docker build -t moyefu/aggregation_email:latest .",
+    "docker:run": "docker run -p 3000:3000 -p 2525:2525 --env-file .env moyefu/aggregation_email:latest",
+    "docker:push": "docker push moyefu/aggregation_email:latest"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0",
+    "bcryptjs": "^3.0.3",
+    "dotenv": "^17.4.2",
+    "jsonwebtoken": "^9.0.3",
+    "mailparser": "^3.9.8",
+    "next": "16.2.6",
+    "nodemailer": "^8.0.8",
+    "prisma": "^5.22.0",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "smtp-server": "^3.18.4"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/mailparser": "^3.4.6",
+    "@types/node": "^20",
+    "@types/nodemailer": "^8.0.0",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@types/smtp-server": "^3.5.13",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.6",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.8.3",
+    "tailwindcss": "^4",
+    "tsx": "^4.22.3",
+    "typescript": "^5"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  }
+}

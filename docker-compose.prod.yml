@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  app:
+    image: moyefu/aggregation_email:latest
+    ports:
+      - "3000:3000"
+      - "2525:2525"
+    environment:
+      - DATABASE_URL=file:./data/prod.db
+      - JWT_SECRET=${JWT_SECRET:-your-jwt-secret-change-in-production}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY:-your-32-character-encryption-key}
+      - SMTP_HOST=0.0.0.0
+      - SMTP_PORT=2525
+      - SITE_SMTP_HOST=${SITE_SMTP_HOST}
+      - SITE_SMTP_PORT=${SITE_SMTP_PORT}
+      - SITE_SMTP_USER=${SITE_SMTP_USER}
+      - SITE_SMTP_PASSWORD=${SITE_SMTP_PASSWORD}
+      - SITE_SMTP_FROM=${SITE_SMTP_FROM}
+      - MAX_API_KEYS_PER_USER=${MAX_API_KEYS_PER_USER:-10}
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123}
+      - NODE_ENV=production
+    volumes:
+      - aggregation_email:/app/data
+    restart: always
+
+volumes:
+  aggregation_email:

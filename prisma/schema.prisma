@@ -1,0 +1,134 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// 支持的数据库类型：
+// 1. SQLite（默认）：provider = "sqlite", url = "file:./dev.db"
+// 2. PostgreSQL：provider = "postgresql", url = "postgresql://user:password@localhost:5432/mydb?schema=public"
+// 3. MySQL：provider = "mysql", url = "mysql://user:password@localhost:3306/mydb"
+// 
+// 切换数据库步骤：
+// 1. 修改 provider 为目标数据库类型
+// 2. 修改 .env 中的 DATABASE_URL 为对应连接字符串
+// 3. 运行 npx prisma db push 同步数据库结构
+
+model UserLevel {
+  id               Int      @id @default(autoincrement())
+  name             String   @unique
+  maxEmailAccounts Int      @default(5)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  users            User[]
+
+  @@map("user_levels")
+}
+
+model User {
+  id                 String         @id @default(cuid())
+  email              String         @unique
+  password           String
+  name               String?
+  levelId            Int            @default(1)
+  isActive           Boolean        @default(true)
+  disabledAt         DateTime?
+  disabledReason     String?
+  lastLoginAt        DateTime?
+  lastLoginIp        String?
+  lastLoginUserAgent String?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  level              UserLevel      @relation(fields: [levelId], references: [id])
+  emailAccounts      EmailAccount[]
+  apiKeys            ApiKey[]
+  emailLogs          EmailLog[]
+
+  @@map("users")
+}
+
+model EmailAccount {
+  id           String     @id @default(cuid())
+  userId       String
+  smtpHost     String
+  smtpPort     Int
+  smtpUser     String
+  smtpPassword String     @db.Text
+  fromEmail    String
+  fromName     String?
+  isVerified   Boolean    @default(false)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emailLogs    EmailLog[]
+
+  @@unique([userId, fromEmail])
+  @@map("email_accounts")
+}
+
+model ApiKey {
+  id                     String        @id @default(cuid())
+  userId                 String
+  key                    String        @unique
+  name                   String
+  scope                  String        @default("ALL")
+  allowedEmailAccountIds String?
+  lastUsedAt             DateTime?
+  createdAt              DateTime      @default(now())
+  updatedAt              DateTime      @updatedAt
+  user                   User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emailLogs              EmailLog[]
+  smtpAuthLogs           SmtpAuthLog[]
+
+  @@map("api_keys")
+}
+
+model EmailLog {
+  id             String       @id @default(cuid())
+  userId         String
+  apiKeyId       String?
+  emailAccountId String
+  to             String
+  subject        String
+  status         String
+  error          String?
+  source         String       @default("API")
+  remoteIp       String?
+  createdAt      DateTime     @default(now())
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  apiKey         ApiKey?      @relation(fields: [apiKeyId], references: [id], onDelete: SetNull)
+  emailAccount   EmailAccount @relation(fields: [emailAccountId], references: [id], onDelete: Cascade)
+
+  @@map("email_logs")
+}
+
+model SmtpAuthLog {
+  id        String   @id @default(cuid())
+  apiKeyId  String?
+  userId    String?
+  username  String
+  success   Boolean
+  error     String?
+  remoteIp  String
+  createdAt DateTime @default(now())
+  apiKey    ApiKey?  @relation(fields: [apiKeyId], references: [id], onDelete: SetNull)
+
+  @@map("smtp_auth_logs")
+}
+
+model VerificationCode {
+  id        String   @id @default(cuid())
+  email     String
+  code      String
+  type      String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([email, type])
+  @@map("verification_codes")
+}

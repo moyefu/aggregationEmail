@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+      - "2525:2525"
+    environment:
+      - DATABASE_URL=file:/app/data/dev.db
+      - JWT_SECRET=your-jwt-secret-change-in-production
+      - ENCRYPTION_KEY=your-32-character-encryption-key
+      - SMTP_HOST=0.0.0.0
+      - SMTP_PORT=2525
+      - NODE_ENV=development
+    volumes:
+      - aggregation_email:/app/data
+    restart: unless-stopped
+
+volumes:
+  aggregation_email:
