@@ -53,18 +53,18 @@ model User {
 }
 
 model Proxy {
-  id        String   @id @default(cuid())
-  userId    String
-  name      String
-  host      String
-  port      Int
-  username  String?
-  password  String?
-  protocol  String   @default("HTTP")
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id            String         @id @default(cuid())
+  userId        String
+  name          String
+  host          String
+  port          Int
+  username      String?
+  password      String?
+  protocol      String         @default("HTTP")
+  isActive      Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   emailAccounts EmailAccount[]
 
   @@unique([userId, name])
@@ -93,18 +93,17 @@ model EmailAccount {
 }
 
 model ApiKey {
-  id                     String        @id @default(cuid())
+  id                     String     @id @default(cuid())
   userId                 String
-  key                    String        @unique
+  key                    String     @unique
   name                   String
-  scope                  String        @default("ALL")
+  scope                  String     @default("ALL")
   allowedEmailAccountIds String?
   lastUsedAt             DateTime?
-  createdAt              DateTime      @default(now())
-  updatedAt              DateTime      @updatedAt
-  user                   User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt              DateTime   @default(now())
+  updatedAt              DateTime   @updatedAt
+  user                   User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   emailLogs              EmailLog[]
-  smtpAuthLogs           SmtpAuthLog[]
 
   @@map("api_keys")
 }
@@ -128,18 +127,18 @@ model EmailLog {
   @@map("email_logs")
 }
 
-model SmtpAuthLog {
-  id        String   @id @default(cuid())
-  apiKeyId  String?
-  userId    String?
-  username  String
-  success   Boolean
-  error     String?
-  remoteIp  String
-  createdAt DateTime @default(now())
-  apiKey    ApiKey?  @relation(fields: [apiKeyId], references: [id], onDelete: SetNull)
+model AuthenticationLog {
+  id         String   @id @default(cuid())
+  apiKeyName String?
+  userId     String?
+  username   String
+  success    Boolean
+  error      String?
+  remoteIp   String
+  source     String   @default("SMTP")
+  createdAt  DateTime @default(now())
 
-  @@map("smtp_auth_logs")
+  @@map("authentication_logs")
 }
 
 model VerificationCode {

@@ -15,6 +15,7 @@ data
 !.yarn/plugins
 !.yarn/releases
 !.yarn/versions
+/dist
 
 # testing
 /coverage

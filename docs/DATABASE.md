@@ -20,7 +20,9 @@ erDiagram
     User ||--o{ EmailAccount : "拥有"
     User ||--o{ ApiKey : "创建"
     User ||--o{ EmailLog : "产生"
+    User ||--o{ Proxy : "创建"
     EmailAccount ||--o{ EmailLog : "发送"
+    EmailAccount }o--o| Proxy : "使用代理"
     ApiKey ||--o{ EmailLog : "使用"
 
     User {
@@ -55,6 +57,21 @@ erDiagram
         string fromEmail "发件人邮箱"
         string fromName "发件人名称"
         boolean isVerified "是否验证"
+        string proxyId FK "代理ID"
+        datetime createdAt "创建时间"
+        datetime updatedAt "更新时间"
+    }
+
+    Proxy {
+        string id PK "代理唯一标识"
+        string userId FK "所属用户ID"
+        string name "代理名称"
+        string host "代理主机"
+        int port "代理端口"
+        string username "认证用户名"
+        string password "认证密码"
+        string protocol "协议类型"
+        boolean isActive "是否启用"
         datetime createdAt "创建时间"
         datetime updatedAt "更新时间"
     }
@@ -80,6 +97,17 @@ erDiagram
         string subject "邮件主题"
         string status "发送状态"
         string error "错误信息"
+        datetime createdAt "创建时间"
+    }
+
+    AuthenticationLog {
+        string id PK "日志唯一标识"
+        string apiKeyName "API密钥名称"
+        string source "来源：API/SMTP"
+        string clientIp "客户端IP"
+        string userAgent "User-Agent"
+        boolean success "是否成功"
+        string errorMessage "错误信息"
         datetime createdAt "创建时间"
     }
 ```
@@ -129,6 +157,7 @@ model User {
   emailAccounts        EmailAccount[]
   apiKeys              ApiKey[]
   emailLogs            EmailLog[]
+  proxies              Proxy[]
 
   @@map("users")
 }
@@ -153,6 +182,7 @@ model User {
 | fromEmail | String | NOT NULL | - | 发件人邮箱地址 |
 | fromName | String | NULL | - | 发件人显示名称 |
 | isVerified | Boolean | NOT NULL | false | SMTP 是否验证通过 |
+| proxyId | String | FOREIGN KEY, NULL | - | 代理 ID |
 | createdAt | DateTime | NOT NULL | now() | 创建时间 |
 | updatedAt | DateTime | NOT NULL | updatedAt | 更新时间 |
 
@@ -168,6 +198,7 @@ model User {
 | 字段 | 引用表 | 引用字段 | 删除行为 |
 |------|--------|----------|----------|
 | userId | users | id | CASCADE（级联删除） |
+| proxyId | proxies | id | SET NULL（设为空） |
 
 **Prisma Schema**
 
@@ -182,9 +213,11 @@ model EmailAccount {
   fromEmail    String
   fromName     String?
   isVerified   Boolean    @default(false)
+  proxyId      String?
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
   user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  proxy        Proxy?     @relation(fields: [proxyId], references: [id], onDelete: SetNull)
   emailLogs    EmailLog[]
 
   @@map("email_accounts")
@@ -193,7 +226,71 @@ model EmailAccount {
 
 ---
 
-### 3. ApiKey 表（API 密钥表）
+### 3. Proxy 表（代理表）
+
+存储用户配置的代理服务器信息，用于 SMTP 连接代理。
+
+**表名**: `proxies`
+
+| 字段名 | 类型 | 约束 | 默认值 | 说明 |
+|--------|------|------|--------|------|
+| id | String | PRIMARY KEY | cuid() | 代理唯一标识 |
+| userId | String | FOREIGN KEY, NOT NULL | - | 所属用户 ID |
+| name | String | NOT NULL | - | 代理名称 |
+| host | String | NOT NULL | - | 代理主机地址 |
+| port | Int | NOT NULL | - | 代理端口号 |
+| username | String | NULL | - | 认证用户名（可选） |
+| password | String | NULL | - | 认证密码（可选，加密存储） |
+| protocol | String | NOT NULL | "HTTP" | 协议类型：HTTP/SOCKS5 |
+| isActive | Boolean | NOT NULL | true | 是否启用 |
+| createdAt | DateTime | NOT NULL | now() | 创建时间 |
+| updatedAt | DateTime | NOT NULL | updatedAt | 更新时间 |
+
+**索引设计**
+
+| 索引名 | 字段 | 类型 | 说明 |
+|--------|------|------|------|
+| PRIMARY | id | 主键索引 | 主键查询 |
+| proxies_userId_idx | userId | 普通索引 | 按用户查询代理列表 |
+
+**外键约束**
+
+| 字段 | 引用表 | 引用字段 | 删除行为 |
+|------|--------|----------|----------|
+| userId | users | id | CASCADE（级联删除） |
+
+**protocol 字段说明**
+
+| 值 | 说明 |
+|------|------|
+| HTTP | HTTP 代理 |
+| SOCKS5 | SOCKS5 代理 |
+
+**Prisma Schema**
+
+```prisma
+model Proxy {
+  id           String          @id @default(cuid())
+  userId       String
+  name         String
+  host         String
+  port         Int
+  username     String?
+  password     String?
+  protocol     String          @default("HTTP")
+  isActive     Boolean         @default(true)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emailAccounts EmailAccount[]
+
+  @@map("proxies")
+}
+```
+
+---
+
+### 4. ApiKey 表（API 密钥表）
 
 存储用户创建的 API 密钥信息。
 
@@ -242,16 +339,16 @@ model EmailAccount {
 
 ```prisma
 model ApiKey {
-  id                     String      @id @default(cuid())
+  id                     String              @id @default(cuid())
   userId                 String
-  key                    String      @unique
+  key                    String              @unique
   name                   String
-  scope                  String      @default("ALL")
+  scope                  String              @default("ALL")
   allowedEmailAccountIds String?
   lastUsedAt             DateTime?
-  createdAt              DateTime    @default(now())
-  updatedAt              DateTime    @updatedAt
-  user                   User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
+  user                   User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   emailLogs              EmailLog[]
 
   @@map("api_keys")
@@ -260,7 +357,60 @@ model ApiKey {
 
 ---
 
-### 4. EmailLog 表（邮件日志表）
+### 5. AuthenticationLog 表（认证日志表）
+
+记录 API 密钥的认证日志，包括 SMTP 和 HTTP API 两种来源。
+
+**表名**: `authentication_logs`
+
+| 字段名 | 类型 | 约束 | 默认值 | 说明 |
+|--------|------|------|--------|------|
+| id | String | PRIMARY KEY | cuid() | 日志唯一标识 |
+| apiKeyName | String | NULL | - | API 密钥名称（直接存储，无外键关联） |
+| source | String | NOT NULL | "SMTP" | 认证来源：API/SMTP |
+| clientIp | String | NULL | - | 客户端 IP 地址 |
+| userAgent | String | NULL | - | 客户端 User-Agent |
+| success | Boolean | NOT NULL | false | 认证是否成功 |
+| errorMessage | String | NULL | - | 错误信息（失败时记录） |
+| createdAt | DateTime | NOT NULL | now() | 创建时间 |
+
+**索引设计**
+
+| 索引名 | 字段 | 类型 | 说明 |
+|--------|------|------|------|
+| PRIMARY | id | 主键索引 | 主键查询 |
+| authentication_logs_apiKeyName_idx | apiKeyName | 普通索引 | 按密钥名称查询日志 |
+| authentication_logs_createdAt_idx | createdAt | 普通索引 | 按时间查询日志 |
+
+**source 字段说明**
+
+| 值 | 说明 |
+|------|------|
+| SMTP | SMTP 协议认证 |
+| API | HTTP API 认证 |
+
+**Prisma Schema**
+
+```prisma
+model AuthenticationLog {
+  id           String   @id @default(cuid())
+  apiKeyName   String?
+  source       String   @default("SMTP")
+  clientIp     String?
+  userAgent    String?
+  success      Boolean  @default(false)
+  errorMessage String?
+  createdAt    DateTime @default(now())
+
+  @@index([apiKeyName])
+  @@index([createdAt])
+  @@map("authentication_logs")
+}
+```
+
+---
+
+### 6. EmailLog 表（邮件日志表）
 
 记录所有邮件发送记录。
 
@@ -326,7 +476,7 @@ model EmailLog {
 
 ---
 
-### 5. VerificationCode 表（验证码表）
+### 7. VerificationCode 表（验证码表）
 
 存储邮箱验证码和密码重置令牌。
 
@@ -380,23 +530,24 @@ model VerificationCode {
 ### 关系图
 
 ```
-┌─────────────┐       ┌──────────────────┐
-│    User     │       │  EmailAccount    │
-├─────────────┤       ├──────────────────┤
-│ id (PK)     │◄──────│ userId (FK)      │
-│ email (UK)  │  1:N  │ id (PK)          │
-│ password    │       │ smtpHost         │
-│ name        │       │ smtpPort         │
-│ lastLoginAt │       │ smtpUser         │
-│ lastLoginIp │       │ smtpPassword     │
-│ lastLoginUA │       │ fromEmail        │
-│ createdAt   │       │ fromName         │
-│ updatedAt   │       │ isVerified       │
-└─────────────┘       └──────────────────┘
-      │                      │
-      │ 1:N                  │ 1:N
-      │                      │
-      ▼                      ▼
+┌─────────────┐       ┌──────────────────┐       ┌──────────────────┐
+│    User     │       │  EmailAccount    │       │      Proxy       │
+├─────────────┤       ├──────────────────┤       ├──────────────────┤
+│ id (PK)     │◄──────│ userId (FK)      │       │ id (PK)          │
+│ email (UK)  │  1:N  │ id (PK)          │──────►│ userId (FK)      │
+│ password    │       │ smtpHost         │  N:1  │ name             │
+│ name        │       │ smtpPort         │       │ host             │
+│ lastLoginAt │       │ smtpUser         │       │ port             │
+│ lastLoginIp │       │ smtpPassword     │       │ username         │
+│ lastLoginUA │       │ fromEmail        │       │ password         │
+│ createdAt   │       │ fromName         │       │ protocol         │
+│ updatedAt   │       │ isVerified       │       │ isActive         │
+└─────────────┘       │ proxyId (FK)     │──────►│ createdAt        │
+      │               └──────────────────┘  N:1  │ updatedAt        │
+      │ 1:N                 │                   └──────────────────┘
+      │                     │ 1:N
+      │                     │
+      ▼                     ▼
 ┌─────────────┐       ┌──────────────────┐
 │   ApiKey    │       │    EmailLog      │
 ├─────────────┤       ├──────────────────┤
@@ -410,6 +561,20 @@ model VerificationCode {
 │ createdAt   │       │ error            │
 │ updatedAt   │       │ createdAt        │
 └─────────────┘       └──────────────────┘
+      │
+      ▼
+┌─────────────────────┐
+│  AuthenticationLog  │
+├─────────────────────┤
+│ id (PK)             │
+│ apiKeyName          │
+│ source              │
+│ clientIp            │
+│ userAgent           │
+│ success             │
+│ errorMessage        │
+│ createdAt           │
+└─────────────────────┘
 
 ┌─────────────────────┐
 │  VerificationCode   │  （独立表，无外键关联）
@@ -431,7 +596,9 @@ model VerificationCode {
 | User → EmailAccount | 一对多 | 一个用户可以绑定多个邮箱账户 |
 | User → ApiKey | 一对多 | 一个用户可以创建多个 API 密钥 |
 | User → EmailLog | 一对多 | 一个用户可以有多条发送记录 |
+| User → Proxy | 一对多 | 一个用户可以创建多个代理配置 |
 | EmailAccount → EmailLog | 一对多 | 一个邮箱账户可以发送多封邮件 |
+| EmailAccount → Proxy | 多对一 | 多个邮箱账户可以共享一个代理（可选） |
 | ApiKey → EmailLog | 一对多 | 一个密钥可以用于多次发送 |
 
 ---

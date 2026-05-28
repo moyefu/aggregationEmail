@@ -86,7 +86,53 @@ MAX_API_KEYS_PER_USER=10
 
 | 变量名 | 说明 | 默认值 |
 |--------|------|--------|
-| MAX_API_KEYS_PER_USER | 每用户最多可创建的 API 密钥数量 | 10 |
+| `MAX_API_KEYS_PER_USER` | 每用户最多可创建的 API 密钥数量 | 10 |
+
+### 代理功能说明
+
+系统支持代理功能，允许邮箱账户通过 HTTP/HTTPS/SOCKS5 代理发送邮件。
+
+**代理功能特性**：
+
+| 特性 | 说明 |
+|------|------|
+| 协议支持 | HTTP、HTTPS、SOCKS5 |
+| 认证支持 | 支持用户名密码认证 |
+| 连接测试 | 添加前可测试连通性和延迟 |
+| 独立配置 | 每个邮箱账户可独立配置代理 |
+
+**代理使用场景**：
+
+- 绕过 IP 限制，提高邮件送达率
+- 通过企业代理服务器发送邮件
+- 使用海外代理发送国际邮件
+- 保护发送邮件的真实 IP 地址
+
+**代理配置流程**：
+
+1. 登录系统后进入「代理管理」页面
+2. 点击「添加代理」填写代理信息
+3. 测试代理连通性后保存
+4. 在邮箱账户编辑页面选择使用的代理
+
+**代理数据库模型**：
+
+```prisma
+model Proxy {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  host      String
+  port      Int
+  username  String?
+  password  String?
+  protocol  String   // HTTP, HTTPS, SOCKS5
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+```
 
 ### 生成安全密钥
 
@@ -661,6 +707,16 @@ server {
     }
 }
 ```
+
+### 7. 代理安全建议
+
+如果使用代理功能发送邮件，请注意以下安全事项：
+
+- **代理服务器安全**：确保代理服务器来源可信，避免使用未知代理
+- **代理认证保护**：代理密码存储在数据库中，建议使用加密存储
+- **代理连接测试**：定期测试代理连通性，确保代理服务稳定
+- **代理日志记录**：记录通过代理发送的邮件，便于追踪问题
+- **代理失效处理**：代理失效时，邮箱账户发送邮件会失败，需及时更换代理
 
 ---
 

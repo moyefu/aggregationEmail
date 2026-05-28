@@ -155,7 +155,7 @@ export default function DashboardPage() {
           </Link>
         </div>
 
-        <div className="grid md:grid-cols-1 gap-6 mb-8">
+        <div className="grid md:grid-cols-2 gap-6 mb-8">
           <Link
             href="/send-test"
             className="bg-white rounded-lg shadow p-6 hover:shadow-md hover:border-purple-300 border-2 border-transparent transition-all cursor-pointer"
@@ -172,6 +172,24 @@ export default function DashboardPage() {
               </div>
             </div>
             <p className="text-purple-600 text-sm mt-2">点击发送测试 →</p>
+          </Link>
+
+          <Link
+            href="/logs"
+            className="bg-white rounded-lg shadow p-6 hover:shadow-md hover:border-indigo-300 border-2 border-transparent transition-all cursor-pointer"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500">发送日志</p>
+                <p className="text-gray-500 text-sm">查看邮件发送历史和 API 调用记录</p>
+              </div>
+              <div className="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center">
+                <svg className="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </div>
+            </div>
+            <p className="text-indigo-600 text-sm mt-2">点击查看日志 →</p>
           </Link>
         </div>
 

@@ -12,6 +12,41 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+interface ApiAuthLogData {
+  apiKeyName?: string;
+  userId?: string;
+  username?: string;
+  success: boolean;
+  error?: string;
+  remoteIp: string;
+}
+
+async function logApiAuth(data: ApiAuthLogData): Promise<void> {
+  try {
+    await prisma.authenticationLog.create({
+      data: {
+        apiKeyName: data.apiKeyName,
+        userId: data.userId,
+        username: data.username || "unknown",
+        success: data.success,
+        error: data.error,
+        remoteIp: data.remoteIp,
+        source: "API",
+      },
+    });
+  } catch (error) {
+    console.error("[API Auth] 记录认证日志失败:", error);
+  }
+}
+
+function getRemoteIp(request: NextRequest): string {
+  return (
+    request.headers.get("x-forwarded-for")?.split(",")[0].trim() ||
+    request.headers.get("x-real-ip") ||
+    "unknown"
+  );
+}
+
 /**
  * API 密钥认证结果接口
  * 包含验证状态、密钥信息、用户信息和错误信息
@@ -74,8 +109,8 @@ export function getApiKeyFromRequest(request: NextRequest): string | null {
  */
 export async function verifyApiKey(request: NextRequest): Promise<ApiKeyAuthResult> {
   const apiKey = getApiKeyFromRequest(request);
+  const remoteIp = getRemoteIp(request);
 
-  // 检查是否提供了 API 密钥
   if (!apiKey) {
     return {
       valid: false,
@@ -83,7 +118,6 @@ export async function verifyApiKey(request: NextRequest): Promise<ApiKeyAuthResu
     };
   }
 
-  // 检查密钥格式是否正确
   if (!apiKey.startsWith("ea_live_")) {
     return {
       valid: false,
@@ -92,7 +126,6 @@ export async function verifyApiKey(request: NextRequest): Promise<ApiKeyAuthResu
   }
 
   try {
-    // 查询密钥记录并关联用户信息
     const keyRecord = await prisma.apiKey.findUnique({
       where: { key: apiKey },
       include: {
@@ -101,12 +134,13 @@ export async function verifyApiKey(request: NextRequest): Promise<ApiKeyAuthResu
             id: true,
             email: true,
             name: true,
+            isActive: true,
+            disabledReason: true,
           },
         },
       },
     });
 
-    // 密钥不存在
     if (!keyRecord) {
       return {
         valid: false,
@@ -114,13 +148,27 @@ export async function verifyApiKey(request: NextRequest): Promise<ApiKeyAuthResu
       };
     }
 
-    // 更新密钥最后使用时间
+    if (!keyRecord.user.isActive) {
+      await logApiAuth({
+        apiKeyName: keyRecord.name,
+        userId: keyRecord.userId,
+        username: keyRecord.user.email,
+        success: false,
+        error: keyRecord.user.disabledReason || "用户已被禁用",
+        remoteIp,
+      });
+
+      return {
+        valid: false,
+        error: "用户已被禁用",
+      };
+    }
+
     await prisma.apiKey.update({
       where: { id: keyRecord.id },
       data: { lastUsedAt: new Date() },
     });
 
-    // 解析允许访问的邮箱账户 ID 列表
     let allowedEmailAccountIds: string[] | null = null;
     if (keyRecord.allowedEmailAccountIds) {
       try {
@@ -139,7 +187,11 @@ export async function verifyApiKey(request: NextRequest): Promise<ApiKeyAuthResu
         scope: keyRecord.scope,
         allowedEmailAccountIds,
       },
-      user: keyRecord.user,
+      user: {
+        id: keyRecord.user.id,
+        email: keyRecord.user.email,
+        name: keyRecord.user.name,
+      },
     };
   } catch (error) {
     console.error("验证 API 密钥失败:", error);

@@ -43,6 +43,8 @@
 | JWT | 9.x | 用户认证令牌 |
 | bcryptjs | 3.x | 密码加密 |
 | Nodemailer | 8.x | 邮件发送库 |
+| socks-proxy-agent | 10.x | SOCKS5 代理支持 |
+| https-proxy-agent | 9.x | HTTP/HTTPS 代理支持 |
 
 ### 开发工具
 
@@ -225,9 +227,15 @@ aggregation-email/
 │   │   │   ├── email-accounts/# 邮箱账户管理
 │   │   │   │   ├── route.ts   # 列表/添加
 │   │   │   │   └── [id]/      # 删除
+│   │   │   ├── proxies/       # 代理管理
+│   │   │   │   ├── route.ts   # 列表/创建
+│   │   │   │   ├── list/      # 活跃代理列表
+│   │   │   │   ├── test/      # 测试代理连接
+│   │   │   │   └── [id]/      # 删除/更新/测试
 │   │   │   └── send/          # 发送邮件
 │   │   ├── api-keys/          # API 密钥管理页面
 │   │   ├── email-accounts/    # 邮箱管理页面
+│   │   ├── proxies/           # 代理管理页面
 │   │   ├── login/             # 登录页面
 │   │   ├── register/          # 注册页面
 │   │   ├── forgot-password/   # 忘记密码页面
@@ -246,6 +254,7 @@ aggregation-email/
 │   ├── lib/                   # 工具库
 │   │   ├── crypto.ts          # 加密工具
 │   │   ├── email.ts           # 邮件发送
+│   │   ├── proxy.ts           # 代理配置与测试
 │   │   ├── prisma.ts          # 数据库客户端
 │   │   ├── smtp.ts            # SMTP 验证
 │   │   └── site-smtp.ts       # 站点 SMTP 发信服务（验证码、密码重置）
@@ -269,6 +278,22 @@ aggregation-email/
 
 ## 服务层 (Lib)
 
+### proxy.ts - 代理配置与测试模块
+
+用于创建和测试代理连接：
+
+| 函数/接口 | 说明 |
+|------|------|
+| ProxyConfig | 代理配置接口（host、port、username、password、protocol） |
+| ProxyTestResult | 测试结果接口（success、error、latency） |
+| createProxyAgent() | 根据配置创建代理 Agent（支持 SOCKS5/HTTP/HTTPS） |
+| testProxyConnection() | 测试代理连通性，返回延迟和错误信息 |
+
+支持的代理协议：
+- **HTTP**：使用 `https-proxy-agent` 处理 HTTP 代理
+- **HTTPS**：使用 `https-proxy-agent` 处理 HTTPS 代理
+- **SOCKS5**：使用 `socks-proxy-agent` 处理 SOCKS5 代理
+
 ### site-smtp.ts - 站点 SMTP 发信服务
 
 用于发送系统邮件（验证码、密码重置）：
@@ -279,6 +304,34 @@ aggregation-email/
 | sendPasswordResetEmail() | 发送密码重置邮件 |
 | sendEmail() | 通用邮件发送 |
 | isSiteSmtpConfigured() | 检查 SMTP 是否配置 |
+
+---
+
+## 代理管理模块
+
+### 代理 API 路由 (/api/proxies/*)
+
+| 路由 | 方法 | 说明 |
+|------|------|------|
+| `/api/proxies` | GET | 获取代理列表（分页） |
+| `/api/proxies` | POST | 创建新代理 |
+| `/api/proxies/list` | GET | 获取活跃代理列表（用于下拉选择） |
+| `/api/proxies/test` | POST | 测试代理配置（无需保存） |
+| `/api/proxies/[id]` | DELETE | 删除代理 |
+| `/api/proxies/[id]` | PUT | 更新代理配置 |
+| `/api/proxies/[id]/test` | POST | 测试已保存的代理 |
+
+### 代理管理页面 (/proxies)
+
+代理管理页面提供以下功能：
+
+- **代理列表展示**：显示所有代理的名称、地址、协议、状态和创建时间
+- **添加代理**：支持填写名称、主机、端口、协议类型、用户名和密码
+- **编辑代理**：修改已保存的代理配置
+- **删除代理**：删除不再使用的代理
+- **单个测试**：测试单个代理的连通性，显示延迟和错误信息
+- **批量测试**：一键测试所有代理，显示测试汇总结果
+- **表单内测试**：添加/编辑时可先测试代理配置是否可用
 
 ---
 

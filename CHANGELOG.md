@@ -2,6 +2,43 @@
 
 所有重要的更改都将记录在此文件中。
 
+## [1.3.0] - 2026-05-28
+
+### 新增功能
+
+#### 认证日志重构
+- 重构：SmtpAuthLog 重命名为 AuthenticationLog
+- 新增：AuthenticationLog 表新增 source 字段，区分 API/SMTP 来源
+- 新增：HTTP API 发送邮件时记录认证日志
+- 优化：AuthenticationLog 移除 apiKeyId 外键关联，改用 apiKeyName 直接存储 API 密钥名称
+- 新增：API 鉴权失败时也记录认证日志（只要能匹配到用户即可记录）
+- 修复：发送日志页面状态显示 bug（status 大小写问题）
+
+#### 代理管理功能
+- 代理管理页面：添加、编辑、删除代理
+- 代理连通性测试：单个测试和全部测试
+- 邮箱账户关联代理：发送邮件时使用指定代理
+- SMTP 发送代理支持：HTTP、HTTPS、SOCKS5 协议
+- 发送日志显示代理信息
+- .dockerignore 排除 .env 文件
+
+### API 接口
+- 新增 GET /api/proxies
+- 新增 POST /api/proxies
+- 新增 PUT /api/proxies/[id]
+- 新增 DELETE /api/proxies/[id]
+- 新增 POST /api/proxies/[id]/test
+- 新增 POST /api/proxies/test
+- 新增 GET /api/proxies/list
+
+### 数据库变更
+- 新增 Proxy 表
+- EmailAccount 表新增 proxyId 字段
+
+### 新增依赖
+- socks-proxy-agent
+- https-proxy-agent
+
 ## [1.2.0] - 2026-05-25
 
 ### 新增功能

@@ -394,6 +394,13 @@ GET /api/email-accounts
       "fromEmail": "user@gmail.com",
       "fromName": "发件人名称",
       "isVerified": true,
+      "proxy": {
+        "id": "clyyy...",
+        "name": "香港代理",
+        "host": "proxy.example.com",
+        "port": 1080,
+        "protocol": "HTTP"
+      },
       "createdAt": "2024-01-01T00:00:00.000Z",
       "updatedAt": "2024-01-01T00:00:00.000Z"
     }
@@ -406,6 +413,8 @@ GET /api/email-accounts
   }
 }
 ```
+
+> **说明**：`proxy` 字段表示该邮箱账户关联的代理配置，若未关联代理则为 `null`。
 
 **错误响应**
 
@@ -442,7 +451,8 @@ POST /api/email-accounts
   "smtpUser": "user@gmail.com",
   "smtpPassword": "your-app-password",
   "fromEmail": "user@gmail.com",
-  "fromName": "发件人名称"
+  "fromName": "发件人名称",
+  "proxyId": "clyyy..."
 }
 ```
 
@@ -454,6 +464,7 @@ POST /api/email-accounts
 | smtpPassword | string | 是 | SMTP 密码或应用专用密码 |
 | fromEmail | string | 是 | 发件人邮箱地址 |
 | fromName | string | 否 | 发件人显示名称 |
+| proxyId | string | 否 | 关联的代理 ID，不指定则不使用代理 |
 
 **成功响应** (200)
 
@@ -468,6 +479,13 @@ POST /api/email-accounts
     "fromEmail": "user@gmail.com",
     "fromName": "发件人名称",
     "isVerified": true,
+    "proxy": {
+      "id": "clyyy...",
+      "name": "香港代理",
+      "host": "proxy.example.com",
+      "port": 1080,
+      "protocol": "HTTP"
+    },
     "createdAt": "2024-01-01T00:00:00.000Z"
   }
 }
@@ -487,7 +505,94 @@ POST /api/email-accounts
 
 ---
 
-### 2.3 删除邮箱账户
+### 2.3 编辑邮箱账户
+
+编辑指定的邮箱账户信息。
+
+**请求**
+
+```
+PUT /api/email-accounts/{id}
+```
+
+**请求头**
+
+| 参数 | 值 | 必填 |
+|------|-----|------|
+| Content-Type | application/json | 是 |
+| Authorization | Bearer \<token\> | 是 |
+
+**路径参数**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| id | string | 是 | 邮箱账户 ID |
+
+**请求体**
+
+```json
+{
+  "smtpHost": "smtp.gmail.com",
+  "smtpPort": 587,
+  "smtpUser": "user@gmail.com",
+  "smtpPassword": "new-app-password",
+  "fromEmail": "user@gmail.com",
+  "fromName": "新发件人名称",
+  "proxyId": "clyyy..."
+}
+```
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| smtpHost | string | 是 | SMTP 服务器地址 |
+| smtpPort | number | 是 | SMTP 端口（1-65535） |
+| smtpUser | string | 是 | SMTP 用户名（通常为邮箱地址） |
+| smtpPassword | string | 否 | SMTP 密码或应用专用密码，不传则保持原密码 |
+| fromEmail | string | 是 | 发件人邮箱地址 |
+| fromName | string | 否 | 发件人显示名称 |
+| proxyId | string | 否 | 关联的代理 ID，传 null 清除代理关联 |
+
+**成功响应** (200)
+
+```json
+{
+  "message": "邮箱账户更新成功",
+  "emailAccount": {
+    "id": "clxxx...",
+    "smtpHost": "smtp.gmail.com",
+    "smtpPort": 587,
+    "smtpUser": "user@gmail.com",
+    "fromEmail": "user@gmail.com",
+    "fromName": "新发件人名称",
+    "isVerified": true,
+    "proxy": {
+      "id": "clyyy...",
+      "name": "香港代理",
+      "host": "proxy.example.com",
+      "port": 1080,
+      "protocol": "HTTP"
+    },
+    "updatedAt": "2024-01-15T00:00:00.000Z"
+  }
+}
+```
+
+**错误响应**
+
+| 状态码 | 错误信息 | 说明 |
+|--------|----------|------|
+| 400 | 缺少必填字段 | 未提供必要参数 |
+| 400 | 发件人邮箱格式不正确 | 邮箱格式验证失败 |
+| 400 | 端口号必须是 1-65535 之间的有效数字 | 端口范围错误 |
+| 400 | SMTP 验证失败: xxx | SMTP 连接验证失败 |
+| 401 | 未授权访问，请先登录 | Token 无效或过期 |
+| 403 | 无权编辑此邮箱账户 | 非账户所有者 |
+| 404 | 邮箱账户不存在 | 账户不存在 |
+| 500 | 服务器内部错误 | 服务器异常 |
+
+---
+
+### 2.4 删除邮箱账户
 
 删除指定的邮箱账户。
 
@@ -528,11 +633,423 @@ DELETE /api/email-accounts/{id}
 
 ---
 
-## 三、API 密钥管理 API
+## 三、代理管理 API
 
 > 以下接口需要 JWT 认证
 
-### 3.1 获取密钥列表
+### 3.1 获取代理列表
+
+获取当前用户的所有代理配置（分页）。
+
+**请求**
+
+```
+GET /api/proxies
+```
+
+**请求头**
+
+| 参数 | 值 | 必填 |
+|------|-----|------|
+| Authorization | Bearer \<token\> | 是 |
+
+**查询参数**
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| page | number | 否 | 1 | 页码 |
+| limit | number | 否 | 10 | 每页数量 |
+
+**成功响应** (200)
+
+```json
+{
+  "proxies": [
+    {
+      "id": "clxxx...",
+      "name": "香港代理",
+      "host": "proxy.example.com",
+      "port": 1080,
+      "username": "user1",
+      "password": null,
+      "protocol": "HTTP",
+      "isActive": true,
+      "lastTestAt": "2024-01-01T00:00:00.000Z",
+      "lastTestResult": true,
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 10,
+    "total": 5,
+    "totalPages": 1
+  }
+}
+```
+
+**错误响应**
+
+| 状态码 | 错误信息 | 说明 |
+|--------|----------|------|
+| 401 | 未授权访问，请先登录 | Token 无效或过期 |
+| 500 | 服务器内部错误 | 服务器异常 |
+
+---
+
+### 3.2 添加代理
+
+添加新的代理配置。
+
+**请求**
+
+```
+POST /api/proxies
+```
+
+**请求头**
+
+| 参数 | 值 | 必填 |
+|------|-----|------|
+| Content-Type | application/json | 是 |
+| Authorization | Bearer \<token\> | 是 |
+
+**请求体**
+
+```json
+{
+  "name": "香港代理",
+  "host": "proxy.example.com",
+  "port": 1080,
+  "username": "user1",
+  "password": "pass123",
+  "protocol": "HTTP"
+}
+```
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| name | string | 是 | 代理名称，用于识别 |
+| host | string | 是 | 代理服务器地址 |
+| port | number | 是 | 代理端口（1-65535） |
+| username | string | 否 | 代理认证用户名 |
+| password | string | 否 | 代理认证密码 |
+| protocol | string | 是 | 代理协议：`HTTP`、`HTTPS` 或 `SOCKS5` |
+
+**成功响应** (200)
+
+```json
+{
+  "message": "代理添加成功",
+  "proxy": {
+    "id": "clxxx...",
+    "name": "香港代理",
+    "host": "proxy.example.com",
+    "port": 1080,
+    "username": "user1",
+    "password": null,
+    "protocol": "HTTP",
+    "isActive": true,
+    "createdAt": "2024-01-01T00:00:00.000Z"
+  }
+}
+```
+
+**错误响应**
+
+| 状态码 | 错误信息 | 说明 |
+|--------|----------|------|
+| 400 | 缺少必填字段 | 未提供必要参数 |
+| 400 | 端口号必须是 1-65535 之间的有效数字 | 端口范围错误 |
+| 400 | 代理协议必须是 HTTP、HTTPS 或 SOCKS5 | protocol 值错误 |
+| 401 | 未授权访问，请先登录 | Token 无效或过期 |
+| 500 | 服务器内部错误 | 服务器异常 |
+
+---
+
+### 3.3 编辑代理
+
+编辑指定的代理配置。
+
+**请求**
+
+```
+PUT /api/proxies/{id}
+```
+
+**请求头**
+
+| 参数 | 值 | 必填 |
+|------|-----|------|
+| Content-Type | application/json | 是 |
+| Authorization | Bearer \<token\> | 是 |
+
+**路径参数**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| id | string | 是 | 代理 ID |
+
+**请求体**
+
+```json
+{
+  "name": "香港代理-更新",
+  "host": "proxy2.example.com",
+  "port": 1081,
+  "username": "user2",
+  "password": "newpass",
+  "protocol": "SOCKS5",
+  "isActive": true
+}
+```
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| name | string | 是 | 代理名称 |
+| host | string | 是 | 代理服务器地址 |
+| port | number | 是 | 代理端口（1-65535） |
+| username | string | 否 | 代理认证用户名 |
+| password | string | 否 | 代理认证密码 |
+| protocol | string | 是 | 代理协议：`HTTP`、`HTTPS` 或 `SOCKS5` |
+| isActive | boolean | 是 | 是否启用 |
+
+**成功响应** (200)
+
+```json
+{
+  "message": "代理更新成功",
+  "proxy": {
+    "id": "clxxx...",
+    "name": "香港代理-更新",
+    "host": "proxy2.example.com",
+    "port": 1081,
+    "username": "user2",
+    "password": null,
+    "protocol": "SOCKS5",
+    "isActive": true,
+    "updatedAt": "2024-01-15T00:00:00.000Z"
+  }
+}
+```
+
+**错误响应**
+
+| 状态码 | 错误信息 | 说明 |
+|--------|----------|------|
+| 400 | 缺少必填字段 | 未提供必要参数 |
+| 400 | 端口号必须是 1-65535 之间的有效数字 | 端口范围错误 |
+| 400 | 代理协议必须是 HTTP、HTTPS 或 SOCKS5 | protocol 值错误 |
+| 401 | 未授权访问，请先登录 | Token 无效或过期 |
+| 403 | 无权编辑此代理 | 非代理所有者 |
+| 404 | 代理不存在 | 代理不存在 |
+| 500 | 服务器内部错误 | 服务器异常 |
+
+---
+
+### 3.4 删除代理
+
+删除指定的代理配置。
+
+**请求**
+
+```
+DELETE /api/proxies/{id}
+```
+
+**请求头**
+
+| 参数 | 值 | 必填 |
+|------|-----|------|
+| Authorization | Bearer \<token\> | 是 |
+
+**路径参数**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| id | string | 是 | 代理 ID |
+
+**成功响应** (200)
+
+```json
+{
+  "message": "代理删除成功"
+}
+```
+
+**错误响应**
+
+| 状态码 | 错误信息 | 说明 |
+|--------|----------|------|
+| 401 | 未授权访问，请先登录 | Token 无效或过期 |
+| 403 | 无权删除此代理 | 非代理所有者 |
+| 404 | 代理不存在 | 代理不存在 |
+| 500 | 服务器内部错误 | 服务器异常 |
+
+---
+
+### 3.5 测试已保存代理
+
+测试已保存的代理配置是否可用。
+
+**请求**
+
+```
+POST /api/proxies/{id}/test
+```
+
+**请求头**
+
+| 参数 | 值 | 必填 |
+|------|-----|------|
+| Authorization | Bearer \<token\> | 是 |
+
+**路径参数**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| id | string | 是 | 代理 ID |
+
+**成功响应** (200)
+
+```json
+{
+  "success": true,
+  "latency": 150,
+  "error": null
+}
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| success | boolean | 测试是否成功 |
+| latency | number | 延迟时间（毫秒），失败时为 null |
+| error | string | 错误信息，成功时为 null |
+
+**错误响应**
+
+| 状态码 | 错误信息 | 说明 |
+|--------|----------|------|
+| 401 | 未授权访问，请先登录 | Token 无效或过期 |
+| 403 | 无权测试此代理 | 非代理所有者 |
+| 404 | 代理不存在 | 代理不存在 |
+| 500 | 服务器内部错误 | 服务器异常 |
+
+---
+
+### 3.6 测试代理配置（预测试）
+
+在保存前测试代理配置是否可用。
+
+**请求**
+
+```
+POST /api/proxies/test
+```
+
+**请求头**
+
+| 参数 | 值 | 必填 |
+|------|-----|------|
+| Content-Type | application/json | 是 |
+| Authorization | Bearer \<token\> | 是 |
+
+**请求体**
+
+```json
+{
+  "host": "proxy.example.com",
+  "port": 1080,
+  "username": "user1",
+  "password": "pass123",
+  "protocol": "HTTP"
+}
+```
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| host | string | 是 | 代理服务器地址 |
+| port | number | 是 | 代理端口（1-65535） |
+| username | string | 否 | 代理认证用户名 |
+| password | string | 否 | 代理认证密码 |
+| protocol | string | 是 | 代理协议：`HTTP`、`HTTPS` 或 `SOCKS5` |
+
+**成功响应** (200)
+
+```json
+{
+  "success": true,
+  "latency": 150,
+  "error": null
+}
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| success | boolean | 测试是否成功 |
+| latency | number | 延迟时间（毫秒），失败时为 null |
+| error | string | 错误信息，成功时为 null |
+
+**错误响应**
+
+| 状态码 | 错误信息 | 说明 |
+|--------|----------|------|
+| 400 | 缺少必填字段 | 未提供必要参数 |
+| 400 | 端口号必须是 1-65535 之间的有效数字 | 端口范围错误 |
+| 400 | 代理协议必须是 HTTP、HTTPS 或 SOCKS5 | protocol 值错误 |
+| 401 | 未授权访问，请先登录 | Token 无效或过期 |
+| 500 | 服务器内部错误 | 服务器异常 |
+
+---
+
+### 3.7 获取活跃代理列表
+
+获取当前用户所有活跃状态的代理配置（不分页）。
+
+**请求**
+
+```
+GET /api/proxies/list
+```
+
+**请求头**
+
+| 参数 | 值 | 必填 |
+|------|-----|------|
+| Authorization | Bearer \<token\> | 是 |
+
+**成功响应** (200)
+
+```json
+{
+  "proxies": [
+    {
+      "id": "clxxx...",
+      "name": "香港代理",
+      "host": "proxy.example.com",
+      "port": 1080,
+      "protocol": "HTTP",
+      "isActive": true
+    }
+  ]
+}
+```
+
+**错误响应**
+
+| 状态码 | 错误信息 | 说明 |
+|--------|----------|------|
+| 401 | 未授权访问，请先登录 | Token 无效或过期 |
+| 500 | 服务器内部错误 | 服务器异常 |
+
+---
+
+## 四、API 密钥管理 API
+
+> 以下接口需要 JWT 认证
+
+### 4.1 获取密钥列表
 
 获取当前用户的所有 API 密钥。
 
@@ -582,7 +1099,7 @@ GET /api/api-keys
 
 ---
 
-### 3.2 创建密钥
+### 4.2 创建密钥
 
 创建新的 API 密钥。
 
@@ -653,7 +1170,7 @@ POST /api/api-keys
 
 ---
 
-### 3.3 获取密钥详情
+### 4.3 获取密钥详情
 
 获取指定 API 密钥的详细信息。
 
@@ -702,7 +1219,7 @@ GET /api/api-keys/{id}
 
 ---
 
-### 3.4 删除密钥
+### 4.4 删除密钥
 
 删除指定的 API 密钥。
 
@@ -743,11 +1260,11 @@ DELETE /api/api-keys/{id}
 
 ---
 
-## 四、邮件发送 API
+## 五、邮件发送 API
 
 > 此接口使用 API Key 认证
 
-### 4.1 发送邮件
+### 5.1 发送邮件
 
 通过 API 发送邮件。
 
@@ -846,7 +1363,87 @@ POST /api/send
 
 ---
 
-## 五、错误码汇总
+## 六、日志查询 API
+
+> 以下接口需要 JWT 认证
+
+### 6.1 获取认证日志
+
+获取当前用户的认证日志列表。
+
+**请求**
+
+```
+GET /api/logs/api
+```
+
+**请求头**
+
+| 参数 | 值 | 必填 |
+|------|-----|------|
+| Authorization | Bearer \<token\> | 是 |
+
+**成功响应** (200)
+
+```json
+{
+  "logs": [
+    {
+      "id": "clxxx...",
+      "username": "user@example.com",
+      "success": true,
+      "error": null,
+      "remoteIp": "192.168.1.1",
+      "source": "SMTP",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "apiKeyName": "生产环境密钥"
+    },
+    {
+      "id": "clyyy...",
+      "username": "生产环境密钥",
+      "success": true,
+      "error": null,
+      "remoteIp": "192.168.1.2",
+      "source": "API",
+      "createdAt": "2024-01-02T00:00:00.000Z",
+      "apiKeyName": "生产环境密钥"
+    }
+  ]
+}
+```
+
+**返回字段说明**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | string | 日志唯一标识符 |
+| username | string | 认证时使用的用户名（SMTP 认证时为邮箱地址，API 认证时为 API 密钥名称） |
+| success | boolean | 认证是否成功 |
+| error | string | 认证失败时的错误信息，成功时为 null |
+| remoteIp | string | 客户端 IP 地址 |
+| source | string | 认证来源：`API`（HTTP API 调用）或 `SMTP`（SMTP 协议认证） |
+| createdAt | string | 认证时间 |
+| apiKeyName | string \| null | API 密钥名称，直接存储于日志记录中（非外键关联）。即使 API Key 被删除，历史日志中仍保留名称；鉴权失败但匹配到用户时也会记录 |
+
+> **source 字段说明**：
+> - `API`：通过 HTTP API 发送邮件时产生的认证日志，记录 API 密钥调用情况
+> - `SMTP`：通过 SMTP 协议认证时产生的日志，记录 SMTP 客户端的认证尝试
+>
+> **apiKeyName 说明**：
+> - 该字段为直接存储的字符串值，不通过外键关联 ApiKey 表
+> - 无论认证成功或失败（只要能匹配到用户），均会记录 apiKeyName
+> - 若 API Key 已被删除，历史日志中的 apiKeyName 仍可正常显示
+
+**错误响应**
+
+| 状态码 | 错误信息 | 说明 |
+|--------|----------|------|
+| 401 | 未授权访问，请先登录 | Token 无效或过期 |
+| 500 | 服务器内部错误 | 服务器异常 |
+
+---
+
+## 七、错误码汇总
 
 | 状态码 | 说明 |
 |--------|------|
@@ -861,7 +1458,7 @@ POST /api/send
 
 ---
 
-## 六、请求示例
+## 八、请求示例
 
 ### cURL 示例
 
@@ -957,7 +1554,7 @@ def send_email(api_key, email_data):
 
 ---
 
-## 七、SMTP 协议接口
+## 九、SMTP 协议接口
 
 除了 HTTP API 外，平台还提供标准 SMTP 协议接口，允许使用任何 SMTP 客户端发送邮件。
 
@@ -1092,11 +1689,11 @@ openssl s_client -connect localhost:2525 -starttls smtp
 
 ---
 
-## 八、管理后台 API
+## 十、管理后台 API
 
 > 以下接口需要管理员认证（通过 `/api/admin/auth/login` 登录后获取的管理员 Token）
 
-### 8.1 管理员登录
+### 9.1 管理员登录
 
 管理员登录获取管理后台访问权限。
 
@@ -1144,7 +1741,7 @@ POST /api/admin/auth/login
 
 ---
 
-### 8.2 管理员登出
+### 9.2 管理员登出
 
 管理员登出账户。
 
@@ -1170,7 +1767,7 @@ POST /api/admin/auth/logout
 
 ---
 
-### 8.3 获取仪表盘统计数据
+### 9.3 获取仪表盘统计数据
 
 获取管理后台仪表盘的统计数据。
 
@@ -1220,7 +1817,7 @@ GET /api/admin/dashboard/stats
 
 ---
 
-### 8.4 获取用户列表
+### 9.4 获取用户列表
 
 获取所有用户列表（分页）。
 
@@ -1283,7 +1880,7 @@ GET /api/admin/users
 
 ---
 
-### 8.5 切换用户状态
+### 9.5 切换用户状态
 
 启用或禁用用户账户。
 
@@ -1338,7 +1935,7 @@ POST /api/admin/users/{id}/toggle-status
 
 ---
 
-### 8.6 修改用户等级
+### 9.6 修改用户等级
 
 修改指定用户的等级。
 
@@ -1400,7 +1997,7 @@ PUT /api/admin/users/{id}/level
 
 ---
 
-### 8.7 获取等级列表
+### 9.7 获取等级列表
 
 获取所有用户等级列表。
 
@@ -1449,7 +2046,7 @@ GET /api/admin/levels
 
 ---
 
-### 8.8 创建等级
+### 9.8 创建等级
 
 创建新的用户等级。
 
@@ -1507,7 +2104,7 @@ POST /api/admin/levels
 
 ---
 
-### 8.9 更新等级
+### 9.9 更新等级
 
 更新指定等级的信息。
 
@@ -1571,7 +2168,7 @@ PUT /api/admin/levels/{id}
 
 ---
 
-### 8.11 创建用户
+### 9.11 创建用户
 
 管理员直接创建用户。
 
@@ -1642,7 +2239,7 @@ POST /api/admin/users
 
 ---
 
-### 8.10 删除等级
+### 9.10 删除等级
 
 删除指定的用户等级。
 

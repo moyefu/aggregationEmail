@@ -49,8 +49,8 @@ export interface SmtpAuthResult {
  * 用于记录每次认证尝试的详细信息
  */
 export interface SmtpAuthLogData {
-  /** 使用的 API 密钥 ID */
-  apiKeyId?: string;
+  /** 使用的 API 密钥名称 */
+  apiKeyName?: string;
   /** 用户 ID */
   userId?: string;
   /** 认证时使用的用户名（邮箱地址） */
@@ -72,14 +72,15 @@ export interface SmtpAuthLogData {
  */
 export async function logSmtpAuth(data: SmtpAuthLogData): Promise<void> {
   try {
-    await prisma.smtpAuthLog.create({
+    await prisma.authenticationLog.create({
       data: {
-        apiKeyId: data.apiKeyId,
+        apiKeyName: data.apiKeyName,
         userId: data.userId,
         username: data.username,
         success: data.success,
         error: data.error,
         remoteIp: data.remoteIp,
+        source: "SMTP",
       },
     });
   } catch (error) {
@@ -197,7 +198,7 @@ export async function authenticateSmtpUser(
 
     // 记录认证成功日志
     await logSmtpAuth({
-      apiKeyId: keyRecord.id,
+      apiKeyName: keyRecord.name,
       userId: keyRecord.userId,
       username: email,
       success: true,

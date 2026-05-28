@@ -15,15 +15,51 @@ interface SendEmailRequestBody {
   attachments?: EmailAttachment[];
 }
 
+async function logAuth(
+  apiKeyName: string,
+  userId: string,
+  username: string,
+  success: boolean,
+  error: string | null,
+  remoteIp: string
+) {
+  try {
+    await prisma.authenticationLog.create({
+      data: {
+        apiKeyName,
+        userId,
+        username,
+        success,
+        error,
+        remoteIp,
+        source: "API",
+      },
+    });
+  } catch (e) {
+    console.error("[API Auth] 记录认证日志失败:", e);
+  }
+}
+
+function getRemoteIp(request: NextRequest): string {
+  return (
+    request.headers.get("x-forwarded-for")?.split(",")[0].trim() ||
+    request.headers.get("x-real-ip") ||
+    "unknown"
+  );
+}
+
 async function POST(
   request: NextRequest,
-  context: { apiKey: { id: string; userId: string }; user: { id: string; email: string } }
+  context: { apiKey: { id: string; userId: string; name: string }; user: { id: string; email: string } }
 ) {
+  const remoteIp = getRemoteIp(request);
+
   try {
     const body: SendEmailRequestBody = await request.json();
     const { from, to, subject, text, html, cc, bcc, attachments } = body;
 
     if (!from || !to || !subject) {
+      await logAuth(context.apiKey.name, context.user.id, context.apiKey.name, false, "缺少必填字段：from, to, subject", remoteIp);
       return NextResponse.json(
         { error: "缺少必填字段：from, to, subject" },
         { status: 400 }
@@ -31,6 +67,7 @@ async function POST(
     }
 
     if (!text && !html) {
+      await logAuth(context.apiKey.name, context.user.id, context.apiKey.name, false, "邮件内容不能为空", remoteIp);
       return NextResponse.json(
         { error: "邮件内容不能为空，请提供 text 或 html" },
         { status: 400 }
@@ -44,6 +81,7 @@ async function POST(
     );
 
     if (!permissionCheck.allowed) {
+      await logAuth(context.apiKey.name, context.user.id, context.apiKey.name, false, permissionCheck.error || "权限检查失败", remoteIp);
       return NextResponse.json(
         { error: permissionCheck.error },
         { status: 403 }
@@ -55,6 +93,7 @@ async function POST(
     });
 
     if (!emailAccount) {
+      await logAuth(context.apiKey.name, context.user.id, context.apiKey.name, false, "邮箱账户不存在", remoteIp);
       return NextResponse.json(
         { error: "邮箱账户不存在" },
         { status: 404 }
@@ -65,6 +104,7 @@ async function POST(
     try {
       decryptedPassword = decrypt(emailAccount.smtpPassword);
     } catch {
+      await logAuth(context.apiKey.name, context.user.id, context.apiKey.name, false, "邮箱账户密码解密失败", remoteIp);
       return NextResponse.json(
         { error: "邮箱账户密码解密失败，请重新绑定邮箱" },
         { status: 500 }
@@ -95,10 +135,6 @@ async function POST(
 
     const toAddress = Array.isArray(to) ? to.join(", ") : to;
 
-    const remoteIp = request.headers.get("x-forwarded-for")?.split(",")[0].trim() ||
-                     request.headers.get("x-real-ip") ||
-                     "unknown";
-
     await prisma.emailLog.create({
       data: {
         userId: context.user.id,
@@ -112,6 +148,8 @@ async function POST(
         remoteIp,
       },
     });
+
+    await logAuth(context.apiKey.name, context.user.id, context.apiKey.name, result.success, result.error || null, remoteIp);
 
     if (result.success) {
       return NextResponse.json({
@@ -130,6 +168,7 @@ async function POST(
     }
   } catch (error) {
     console.error("发送邮件错误:", error);
+    await logAuth(context.apiKey.name, context.user.id, context.apiKey.name, false, "发送邮件时发生错误", remoteIp);
     return NextResponse.json(
       { error: "发送邮件时发生错误" },
       { status: 500 }
