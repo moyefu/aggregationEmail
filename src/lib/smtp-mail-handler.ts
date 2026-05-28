@@ -44,7 +44,24 @@ export interface MailProcessResult {
 export async function findEmailAccountByFromEmail(
   fromEmail: string,
   userId: string
-): Promise<{ id: string; fromEmail: string; fromName: string | null; smtpHost: string; smtpPort: number; smtpUser: string; smtpPassword: string } | null> {
+): Promise<{
+  id: string;
+  fromEmail: string;
+  fromName: string | null;
+  smtpHost: string;
+  smtpPort: number;
+  smtpUser: string;
+  smtpPassword: string;
+  proxy?: {
+    id: string;
+    name: string;
+    host: string;
+    port: number;
+    username: string | null;
+    password: string | null;
+    protocol: string;
+  } | null;
+} | null> {
   const emailAccount = await prisma.emailAccount.findFirst({
     where: {
       fromEmail,
@@ -58,6 +75,17 @@ export async function findEmailAccountByFromEmail(
       smtpPort: true,
       smtpUser: true,
       smtpPassword: true,
+      proxy: {
+        select: {
+          id: true,
+          name: true,
+          host: true,
+          port: true,
+          username: true,
+          password: true,
+          protocol: true,
+        },
+      },
     },
   });
 
@@ -232,15 +260,40 @@ export async function processIncomingMail(
     attachments: emailAttachments,
   };
 
+  const proxyConfig = emailAccount.proxy
+    ? {
+        name: emailAccount.proxy.name,
+        host: emailAccount.proxy.host,
+        port: emailAccount.proxy.port,
+        username: emailAccount.proxy.username,
+        password: emailAccount.proxy.password,
+        protocol: emailAccount.proxy.protocol,
+      }
+    : undefined;
+
+  if (proxyConfig) {
+    console.log(`[SMTP] 使用代理: ${proxyConfig.name} (${proxyConfig.protocol} ${proxyConfig.host}:${proxyConfig.port})`);
+  } else {
+    console.log(`[SMTP] 不使用代理，直接连接`);
+  }
+
   console.log(`[SMTP] 正在发送邮件...`);
 
-  // 通过实际的 SMTP 服务器发送邮件
   const result = await sendEmail(
     {
       host: emailAccount.smtpHost,
       port: emailAccount.smtpPort,
       user: emailAccount.smtpUser,
       password: decryptedPassword,
+      proxy: proxyConfig
+        ? {
+            host: proxyConfig.host,
+            port: proxyConfig.port,
+            username: proxyConfig.username,
+            password: proxyConfig.password,
+            protocol: proxyConfig.protocol,
+          }
+        : undefined,
     },
     emailOptions
   );

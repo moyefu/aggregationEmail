@@ -1,6 +1,14 @@
 "use client";
 
-import { useState, FormEvent } from "react";
+import { useState, FormEvent, useEffect } from "react";
+
+interface Proxy {
+  id: string;
+  name: string;
+  host: string;
+  port: number;
+  protocol: string;
+}
 
 interface AddEmailFormProps {
   onSuccess: () => void;
@@ -14,6 +22,7 @@ interface FormData {
   smtpPassword: string;
   fromEmail: string;
   fromName: string;
+  proxyId: string;
 }
 
 const initialFormData: FormData = {
@@ -23,6 +32,7 @@ const initialFormData: FormData = {
   smtpPassword: "",
   fromEmail: "",
   fromName: "",
+  proxyId: "",
 };
 
 export default function AddEmailForm({ onSuccess, onCancel }: AddEmailFormProps) {
@@ -34,6 +44,31 @@ export default function AddEmailForm({ onSuccess, onCancel }: AddEmailFormProps)
   const [testEmail, setTestEmail] = useState("");
   const [sendingTest, setSendingTest] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [proxies, setProxies] = useState<Proxy[]>([]);
+
+  useEffect(() => {
+    fetchProxies();
+  }, []);
+
+  const fetchProxies = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) return;
+
+      const response = await fetch("/api/proxies/list", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setProxies(data.proxies || []);
+      }
+    } catch (err) {
+      console.error("获取代理列表错误:", err);
+    }
+  };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -168,6 +203,7 @@ export default function AddEmailForm({ onSuccess, onCancel }: AddEmailFormProps)
           smtpPassword: formData.smtpPassword,
           fromEmail: formData.fromEmail.trim(),
           fromName: formData.fromName.trim() || null,
+          proxyId: formData.proxyId || null,
         }),
       });
 
@@ -353,6 +389,33 @@ export default function AddEmailForm({ onSuccess, onCancel }: AddEmailFormProps)
               disabled={isLoading}
             />
           </div>
+        </div>
+
+        <div>
+          <label
+            className="block text-gray-700 text-sm font-medium mb-2"
+            htmlFor="proxyId"
+          >
+            发送代理（可选）
+          </label>
+          <select
+            className="shadow-sm appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            id="proxyId"
+            name="proxyId"
+            value={formData.proxyId}
+            onChange={(e) => setFormData((prev) => ({ ...prev, proxyId: e.target.value }))}
+            disabled={isLoading}
+          >
+            <option value="">不使用代理</option>
+            {proxies.map((proxy) => (
+              <option key={proxy.id} value={proxy.id}>
+                {proxy.name} ({proxy.host}:{proxy.port} - {proxy.protocol})
+              </option>
+            ))}
+          </select>
+          <p className="mt-1 text-sm text-gray-500">
+            选择代理后，此邮箱发送邮件时将通过代理服务器转发，适用于外网发送受限的场景
+          </p>
         </div>
 
         <div className="border-t border-gray-200 pt-4 mt-4">

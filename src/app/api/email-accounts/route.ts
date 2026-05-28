@@ -8,7 +8,7 @@ async function POST(request: NextRequest) {
   try {
     const user = (request as NextRequest & { user: { id: string } }).user;
     const body = await request.json();
-    const { smtpHost, smtpPort, smtpUser, smtpPassword, fromEmail, fromName } = body;
+    const { smtpHost, smtpPort, smtpUser, smtpPassword, fromEmail, fromName, proxyId } = body;
 
     if (!smtpHost || !smtpPort || !smtpUser || !smtpPassword || !fromEmail) {
       return NextResponse.json(
@@ -48,7 +48,6 @@ async function POST(request: NextRequest) {
       );
     }
 
-    // 检查密码是否是用户的 API Key
     const userApiKeys = await prisma.apiKey.findMany({
       where: { userId: user.id },
       select: { key: true },
@@ -60,6 +59,20 @@ async function POST(request: NextRequest) {
         { error: "不能使用本服务的 API Key 作为 SMTP 密码，这会导致循环请求" },
         { status: 400 }
       );
+    }
+
+    if (proxyId) {
+      const proxy = await prisma.proxy.findUnique({
+        where: { id: proxyId },
+        select: { userId: true },
+      });
+
+      if (!proxy || proxy.userId !== user.id) {
+        return NextResponse.json(
+          { error: "代理不存在或无权使用" },
+          { status: 400 }
+        );
+      }
     }
 
     const [currentCount, userWithLevel] = await Promise.all([
@@ -118,6 +131,7 @@ async function POST(request: NextRequest) {
         smtpPassword: encryptedPassword,
         fromEmail,
         fromName: fromName || null,
+        proxyId: proxyId || null,
         isVerified: true,
       },
       select: {
@@ -127,6 +141,16 @@ async function POST(request: NextRequest) {
         smtpUser: true,
         fromEmail: true,
         fromName: true,
+        proxyId: true,
+        proxy: {
+          select: {
+            id: true,
+            name: true,
+            host: true,
+            port: true,
+            protocol: true,
+          },
+        },
         isVerified: true,
         createdAt: true,
       },
@@ -163,6 +187,16 @@ async function GET(request: NextRequest) {
           smtpUser: true,
           fromEmail: true,
           fromName: true,
+          proxyId: true,
+          proxy: {
+            select: {
+              id: true,
+              name: true,
+              host: true,
+              port: true,
+              protocol: true,
+            },
+          },
           isVerified: true,
           createdAt: true,
           updatedAt: true,

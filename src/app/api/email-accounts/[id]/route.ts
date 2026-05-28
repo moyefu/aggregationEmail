@@ -53,7 +53,7 @@ async function putHandler(request: NextRequest, { params }: RouteParams) {
     const user = (request as NextRequest & { user: { id: string } }).user;
     const { id } = await params;
     const body = await request.json();
-    const { smtpHost, smtpPort, smtpUser, smtpPassword, fromEmail, fromName } = body;
+    const { smtpHost, smtpPort, smtpUser, smtpPassword, fromEmail, fromName, proxyId } = body;
 
     const emailAccount = await prisma.emailAccount.findUnique({
       where: { id },
@@ -96,7 +96,6 @@ async function putHandler(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // 检查是否使用本服务的 SMTP 服务器
     const selfSmtpPort = parseInt(process.env.SMTP_PORT || "2525", 10);
     const selfSmtpHost = process.env.SMTP_HOST || "0.0.0.0";
     const isSelfSmtpServer =
@@ -113,7 +112,6 @@ async function putHandler(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // 检查密码是否是用户的 API Key
     if (smtpPassword && smtpPassword.trim()) {
       const userApiKeys = await prisma.apiKey.findMany({
         where: { userId: user.id },
@@ -129,12 +127,27 @@ async function putHandler(request: NextRequest, { params }: RouteParams) {
       }
     }
 
+    if (proxyId) {
+      const proxy = await prisma.proxy.findUnique({
+        where: { id: proxyId },
+        select: { userId: true },
+      });
+
+      if (!proxy || proxy.userId !== user.id) {
+        return NextResponse.json(
+          { error: "代理不存在或无权使用" },
+          { status: 400 }
+        );
+      }
+    }
+
     const updateData: {
       smtpHost: string;
       smtpPort: number;
       smtpUser: string;
       fromEmail: string;
       fromName: string | null;
+      proxyId: string | null;
       smtpPassword?: string;
       isVerified?: boolean;
     } = {
@@ -143,6 +156,7 @@ async function putHandler(request: NextRequest, { params }: RouteParams) {
       smtpUser,
       fromEmail,
       fromName: fromName || null,
+      proxyId: proxyId || null,
     };
 
     if (smtpPassword && smtpPassword.trim()) {
@@ -174,6 +188,16 @@ async function putHandler(request: NextRequest, { params }: RouteParams) {
         smtpUser: true,
         fromEmail: true,
         fromName: true,
+        proxyId: true,
+        proxy: {
+          select: {
+            id: true,
+            name: true,
+            host: true,
+            port: true,
+            protocol: true,
+          },
+        },
         isVerified: true,
         createdAt: true,
         updatedAt: true,

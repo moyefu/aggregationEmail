@@ -9,6 +9,14 @@ export interface EmailAccountItem {
   smtpUser: string;
   fromEmail: string;
   fromName: string | null;
+  proxyId: string | null;
+  proxy?: {
+    id: string;
+    name: string;
+    host: string;
+    port: number;
+    protocol: string;
+  } | null;
   isVerified: boolean;
   createdAt: string;
   updatedAt: string;
@@ -110,6 +118,9 @@ export default function EmailAccountList({
                 用户名
               </th>
               <th className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
+                代理
+              </th>
+              <th className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
                 <div className="flex items-center gap-2">
                   状态
                   <button
@@ -156,6 +167,15 @@ export default function EmailAccountList({
                 </td>
                 <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
                   {account.smtpUser}
+                </td>
+                <td className="whitespace-nowrap px-3 py-4 text-sm">
+                  {account.proxy ? (
+                    <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800">
+                      {account.proxy.name}
+                    </span>
+                  ) : (
+                    <span className="text-gray-400">-</span>
+                  )}
                 </td>
                 <td className="whitespace-nowrap px-3 py-4 text-sm">
                   {account.isVerified ? (

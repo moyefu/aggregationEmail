@@ -13,6 +13,7 @@
  */
 
 import nodemailer, { Transporter, SendMailOptions, SentMessageInfo } from "nodemailer";
+import { createProxyAgent, ProxyConfig } from "@/lib/proxy";
 
 /**
  * SMTP 服务器配置接口
@@ -29,6 +30,8 @@ export interface SmtpConfig {
   password: string;
   /** 是否使用安全连接（SSL/TLS），默认端口 465 时为 true */
   secure?: boolean;
+  /** 代理配置，可选 */
+  proxy?: ProxyConfig;
 }
 
 /**
@@ -113,20 +116,27 @@ export interface TransporterInfo {
  * });
  */
 export function createTransporter(config: SmtpConfig): Transporter {
-  return nodemailer.createTransport({
+  const transporterOptions: any = {
     host: config.host,
     port: config.port,
-    // 端口为 465 时默认使用安全连接
     secure: config.secure ?? config.port === 465,
     auth: {
       user: config.user,
       pass: config.password,
     },
-    // 连接超时时间：30秒
     connectionTimeout: 30000,
-    // Socket 超时时间：30秒
     socketTimeout: 30000,
-  });
+  };
+
+  if (config.proxy) {
+    const proxyAgent = createProxyAgent(config.proxy);
+    transporterOptions.proxy = `${config.proxy.protocol.toLowerCase()}://${config.proxy.host}:${config.proxy.port}`;
+    if (config.proxy.username && config.proxy.password) {
+      transporterOptions.proxy = `${config.proxy.protocol.toLowerCase()}://${config.proxy.username}:${config.proxy.password}@${config.proxy.host}:${config.proxy.port}`;
+    }
+  }
+
+  return nodemailer.createTransport(transporterOptions);
 }
 
 /**

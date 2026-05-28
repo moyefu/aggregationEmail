@@ -137,6 +137,26 @@ export default function DashboardPage() {
           </Link>
 
           <Link
+            href="/proxies"
+            className="bg-white rounded-lg shadow p-6 hover:shadow-md hover:border-orange-300 border-2 border-transparent transition-all cursor-pointer"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500">代理管理</p>
+                <p className="text-gray-500 text-sm">SMTP 发送代理</p>
+              </div>
+              <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center">
+                <svg className="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                </svg>
+              </div>
+            </div>
+            <p className="text-orange-600 text-sm mt-2">点击管理代理 →</p>
+          </Link>
+        </div>
+
+        <div className="grid md:grid-cols-1 gap-6 mb-8">
+          <Link
             href="/send-test"
             className="bg-white rounded-lg shadow p-6 hover:shadow-md hover:border-purple-300 border-2 border-transparent transition-all cursor-pointer"
           >

@@ -4,7 +4,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "mysql"
   url      = env("DATABASE_URL")
 }
 
@@ -47,8 +47,28 @@ model User {
   emailAccounts      EmailAccount[]
   apiKeys            ApiKey[]
   emailLogs          EmailLog[]
+  proxies            Proxy[]
 
   @@map("users")
+}
+
+model Proxy {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  host      String
+  port      Int
+  username  String?
+  password  String?
+  protocol  String   @default("HTTP")
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emailAccounts EmailAccount[]
+
+  @@unique([userId, name])
+  @@map("proxies")
 }
 
 model EmailAccount {
@@ -57,13 +77,15 @@ model EmailAccount {
   smtpHost     String
   smtpPort     Int
   smtpUser     String
-  smtpPassword String
+  smtpPassword String     @db.Text
   fromEmail    String
   fromName     String?
+  proxyId      String?
   isVerified   Boolean    @default(false)
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
   user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  proxy        Proxy?     @relation(fields: [proxyId], references: [id], onDelete: SetNull)
   emailLogs    EmailLog[]
 
   @@unique([userId, fromEmail])
