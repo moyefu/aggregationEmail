@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, FormEvent } from "react";
+import { useState, useRef, FormEvent } from "react";
 
 interface EmailAccount {
   id: string;
@@ -15,7 +15,7 @@ interface SendTestFormProps {
   onSuccess: () => void;
 }
 
-interface FormData {
+interface FormFields {
   from: string;
   to: string;
   subject: string;
@@ -25,7 +25,7 @@ interface FormData {
   bcc: string;
 }
 
-const initialFormData: FormData = {
+const initialFormFields: FormFields = {
   from: "",
   to: "",
   subject: "",
@@ -36,48 +36,66 @@ const initialFormData: FormData = {
 };
 
 export default function SendTestForm({ emailAccounts, apiKey, onSuccess }: SendTestFormProps) {
-  const [formData, setFormData] = useState<FormData>(initialFormData);
+  const [fields, setFields] = useState<FormFields>(initialFormFields);
   const [contentMode, setContentMode] = useState<"text" | "html">("text");
+  const [files, setFiles] = useState<File[]>([]);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
   ) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    setFields((prev) => ({ ...prev, [name]: value }));
     setError("");
     setSuccess("");
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const newFiles = Array.from(e.target.files);
+      setFiles((prev) => [...prev, ...newFiles]);
+      setError("");
+      setSuccess("");
+    }
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  const removeFile = (index: number) => {
+    setFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
   const validateForm = (): boolean => {
-    if (!formData.from) {
+    if (!fields.from) {
       setError("请选择发件人邮箱");
       return false;
     }
-    if (!formData.to.trim()) {
+    if (!fields.to.trim()) {
       setError("收件人邮箱不能为空");
       return false;
     }
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    const toEmails = formData.to.split(",").map((e) => e.trim());
+    const toEmails = fields.to.split(",").map((e) => e.trim());
     for (const email of toEmails) {
       if (!emailRegex.test(email)) {
         setError(`收件人邮箱格式不正确: ${email}`);
         return false;
       }
     }
-    if (!formData.subject.trim()) {
+    if (!fields.subject.trim()) {
       setError("邮件主题不能为空");
       return false;
     }
-    if (contentMode === "text" && !formData.text.trim()) {
-      setError("邮件内容不能为空");
+    if (contentMode === "text" && !fields.text.trim() && files.length === 0) {
+      setError("邮件内容或附件不能同时为空");
       return false;
     }
-    if (contentMode === "html" && !formData.html.trim()) {
-      setError("邮件内容不能为空");
+    if (contentMode === "html" && !fields.html.trim() && files.length === 0) {
+      setError("邮件内容或附件不能同时为空");
       return false;
     }
     return true;
@@ -88,9 +106,7 @@ export default function SendTestForm({ emailAccounts, apiKey, onSuccess }: SendT
     setError("");
     setSuccess("");
 
-    if (!validateForm()) {
-      return;
-    }
+    if (!validateForm()) return;
 
     if (!apiKey) {
       setError("请先输入 API 密钥");
@@ -100,23 +116,34 @@ export default function SendTestForm({ emailAccounts, apiKey, onSuccess }: SendT
     setIsLoading(true);
 
     try {
-      const toEmails = formData.to.split(",").map((e) => e.trim());
+      const formData = new FormData();
+      formData.append("from", fields.from);
+      formData.append("to", fields.to.trim());
+      formData.append("subject", fields.subject.trim());
+
+      if (contentMode === "text" && fields.text.trim()) {
+        formData.append("text", fields.text.trim());
+      }
+      if (contentMode === "html" && fields.html.trim()) {
+        formData.append("html", fields.html.trim());
+      }
+      if (fields.cc.trim()) {
+        formData.append("cc", fields.cc.trim());
+      }
+      if (fields.bcc.trim()) {
+        formData.append("bcc", fields.bcc.trim());
+      }
+
+      for (const file of files) {
+        formData.append("attachments", file);
+      }
 
       const response = await fetch("/api/send", {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
           Authorization: `Bearer ${apiKey}`,
         },
-        body: JSON.stringify({
-          from: formData.from,
-          to: toEmails.length === 1 ? toEmails[0] : toEmails,
-          subject: formData.subject.trim(),
-          text: contentMode === "text" ? formData.text.trim() : undefined,
-          html: contentMode === "html" ? formData.html.trim() : undefined,
-          cc: formData.cc.trim() || undefined,
-          bcc: formData.bcc.trim() || undefined,
-        }),
+        body: formData,
       });
 
       const data = await response.json();
@@ -128,7 +155,8 @@ export default function SendTestForm({ emailAccounts, apiKey, onSuccess }: SendT
       }
 
       setSuccess(`邮件发送成功！Message ID: ${data.messageId}`);
-      setFormData(initialFormData);
+      setFields(initialFormFields);
+      setFiles([]);
       onSuccess();
     } catch (err) {
       setError("网络错误，请稍后重试");
@@ -149,8 +177,14 @@ export default function SendTestForm({ emailAccounts, apiKey, onSuccess }: SendT
     );
   }
 
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+    return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+  };
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={handleSubmit} encType="multipart/form-data" className="space-y-6">
       {error && (
         <div className="p-3 bg-red-100 border border-red-400 text-red-700 rounded text-sm">
           {error}
@@ -169,7 +203,7 @@ export default function SendTestForm({ emailAccounts, apiKey, onSuccess }: SendT
         </label>
         <select
           name="from"
-          value={formData.from}
+          value={fields.from}
           onChange={handleChange}
           disabled={isLoading}
           className="shadow-sm appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -190,7 +224,7 @@ export default function SendTestForm({ emailAccounts, apiKey, onSuccess }: SendT
         <input
           type="text"
           name="to"
-          value={formData.to}
+          value={fields.to}
           onChange={handleChange}
           disabled={isLoading}
           placeholder="多个收件人用逗号分隔"
@@ -204,7 +238,7 @@ export default function SendTestForm({ emailAccounts, apiKey, onSuccess }: SendT
           <input
             type="text"
             name="cc"
-            value={formData.cc}
+            value={fields.cc}
             onChange={handleChange}
             disabled={isLoading}
             placeholder="多个抄送用逗号分隔"
@@ -217,7 +251,7 @@ export default function SendTestForm({ emailAccounts, apiKey, onSuccess }: SendT
           <input
             type="text"
             name="bcc"
-            value={formData.bcc}
+            value={fields.bcc}
             onChange={handleChange}
             disabled={isLoading}
             placeholder="多个密送用逗号分隔"
@@ -233,7 +267,7 @@ export default function SendTestForm({ emailAccounts, apiKey, onSuccess }: SendT
         <input
           type="text"
           name="subject"
-          value={formData.subject}
+          value={fields.subject}
           onChange={handleChange}
           disabled={isLoading}
           placeholder="请输入邮件主题"
@@ -244,10 +278,10 @@ export default function SendTestForm({ emailAccounts, apiKey, onSuccess }: SendT
       <div>
         <div className="flex items-center justify-between mb-2">
           <label className="block text-gray-700 text-sm font-medium">
-            邮件内容 <span className="text-red-500">*</span>
+            邮件内容
           </label>
           <div className="flex items-center space-x-4">
-            <label className="inline-flex items-center">
+            <label className="inline-flex items-center cursor-pointer">
               <input
                 type="radio"
                 checked={contentMode === "text"}
@@ -256,7 +290,7 @@ export default function SendTestForm({ emailAccounts, apiKey, onSuccess }: SendT
               />
               <span className="ml-2 text-sm text-gray-600">纯文本</span>
             </label>
-            <label className="inline-flex items-center">
+            <label className="inline-flex items-center cursor-pointer">
               <input
                 type="radio"
                 checked={contentMode === "html"}
@@ -271,7 +305,7 @@ export default function SendTestForm({ emailAccounts, apiKey, onSuccess }: SendT
         {contentMode === "text" ? (
           <textarea
             name="text"
-            value={formData.text}
+            value={fields.text}
             onChange={handleChange}
             disabled={isLoading}
             rows={8}
@@ -281,13 +315,71 @@ export default function SendTestForm({ emailAccounts, apiKey, onSuccess }: SendT
         ) : (
           <textarea
             name="html"
-            value={formData.html}
+            value={fields.html}
             onChange={handleChange}
             disabled={isLoading}
             rows={12}
             placeholder="请输入 HTML 格式的邮件内容..."
             className="shadow-sm appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
           />
+        )}
+      </div>
+
+      <div>
+        <label className="block text-gray-700 text-sm font-medium mb-2">
+          附件
+        </label>
+        <div
+          onClick={() => fileInputRef.current?.click()}
+          className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors"
+        >
+          <svg className="mx-auto h-10 w-10 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 16.5V9.75m0 0l3 3m-3-3l-3 3M6.75 19.5a4.5 4.5 0 01-1.41-8.775 5.25 5.25 0 0110.233-2.33 3 3 0 013.758 3.848A3.752 3.752 0 0118 19.5H6.75z" />
+          </svg>
+          <p className="mt-2 text-sm text-gray-600">
+            点击或拖拽文件到此处上传
+          </p>
+          <p className="mt-1 text-xs text-gray-400">
+            支持任意格式文件，可多选
+          </p>
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            onChange={handleFileChange}
+            className="hidden"
+          />
+        </div>
+
+        {files.length > 0 && (
+          <div className="mt-3 space-y-2">
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+              已选择 {files.length} 个文件
+            </p>
+            <ul className="divide-y divide-gray-100 bg-gray-50 rounded-lg overflow-hidden">
+              {files.map((file, index) => (
+                <li key={`${file.name}-${index}`} className="flex items-center justify-between px-4 py-2.5 hover:bg-gray-100">
+                  <div className="flex items-center min-w-0 flex-1">
+                    <svg className="h-5 w-5 text-gray-400 mr-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                    </svg>
+                    <span className="text-sm text-gray-700 truncate">{file.name}</span>
+                    <span className="ml-2 text-xs text-gray-400 flex-shrink-0">{formatFileSize(file.size)}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removeFile(index)}
+                    className="ml-3 text-gray-400 hover:text-red-500 transition-colors cursor-pointer"
+                    title="移除文件"
+                  >
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
       </div>
 

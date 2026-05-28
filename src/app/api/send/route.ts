@@ -48,6 +48,77 @@ function getRemoteIp(request: NextRequest): string {
   );
 }
 
+function parseToArray(value: string | null | undefined): string[] | string {
+  if (!value) return value || "";
+  if (value.includes(",")) {
+    return value.split(",").map((s) => s.trim()).filter(Boolean);
+  }
+  return value;
+}
+
+async function parseRequestBody(request: NextRequest): Promise<SendEmailRequestBody> {
+  const contentType = request.headers.get("content-type") || "";
+
+  if (contentType.includes("multipart/form-data")) {
+    const formData = await request.formData();
+    const attachments: EmailAttachment[] = [];
+
+    for (const [key, value] of formData.entries()) {
+      if (key.trim() === "attachments" && value instanceof File) {
+        const buffer = Buffer.from(await value.arrayBuffer());
+        attachments.push({
+          filename: value.name || "attachment",
+          content: buffer.toString("base64"),
+          encoding: "base64",
+          contentType: value.type || "application/octet-stream",
+        });
+      }
+    }
+
+    const getString = (key: string): string => {
+      const val = formData.get(key.trim());
+      if (val === null || val === undefined) return "";
+      if (typeof val === "string") return val.trim();
+      if (val instanceof File) return "";
+      return String(val).trim();
+    };
+
+    const allEntries: Record<string, unknown> = {};
+    for (const [key, value] of formData.entries()) {
+      const displayVal = value instanceof File ? `[File: ${value.name}]` : String(value);
+      allEntries[key] = displayVal;
+    }
+    console.log("[API Send] All FormData entries:", JSON.stringify(allEntries, null, 2));
+
+    const from = getString("from");
+    const to = getString("to");
+    const subject = getString("subject");
+    const text = getString("text") || undefined;
+    const html = getString("html") || undefined;
+    const cc = getString("cc") || undefined;
+    const bcc = getString("bcc") || undefined;
+
+    console.log("[API Send] FormData parsed:", { from, to, subject, hasText: !!text, hasHtml: !!html, attachmentCount: attachments.length });
+
+    return {
+      from,
+      to: to ? parseToArray(to) : "",
+      subject,
+      text: text || undefined,
+      html: html || undefined,
+      cc: cc ? parseToArray(cc) : undefined,
+      bcc: bcc ? parseToArray(bcc) : undefined,
+      attachments: attachments.length > 0 ? attachments : undefined,
+    };
+  }
+
+  try {
+    return await request.json();
+  } catch {
+    throw new Error("请求体解析失败，请确保 Content-Type 为 application/json（JSON 格式）或 multipart/form-data（表单格式）");
+  }
+}
+
 async function POST(
   request: NextRequest,
   context: { apiKey: { id: string; userId: string; name: string }; user: { id: string; email: string } }
@@ -55,7 +126,7 @@ async function POST(
   const remoteIp = getRemoteIp(request);
 
   try {
-    const body: SendEmailRequestBody = await request.json();
+    const body: SendEmailRequestBody = await parseRequestBody(request);
     const { from, to, subject, text, html, cc, bcc, attachments } = body;
 
     if (!from || !to || !subject) {
@@ -168,10 +239,12 @@ async function POST(
     }
   } catch (error) {
     console.error("发送邮件错误:", error);
-    await logAuth(context.apiKey.name, context.user.id, context.apiKey.name, false, "发送邮件时发生错误", remoteIp);
+    const errorMessage = error instanceof Error ? error.message : "发送邮件时发生错误";
+    const isParseError = errorMessage.includes("请求体解析失败");
+    await logAuth(context.apiKey.name, context.user.id, context.apiKey.name, false, errorMessage, remoteIp);
     return NextResponse.json(
-      { error: "发送邮件时发生错误" },
-      { status: 500 }
+      { error: errorMessage },
+      { status: isParseError ? 400 : 500 }
     );
   }
 }

@@ -194,12 +194,21 @@ export async function sendEmail(
           : mailOptions.bcc
         : undefined,
       // 处理附件，默认使用 base64 编码
-      attachments: mailOptions.attachments?.map((att) => ({
-        filename: att.filename,
-        content: att.content,
-        encoding: att.encoding || "base64",
-        contentType: att.contentType,
-      })),
+      attachments: mailOptions.attachments?.map((att) => {
+        let content = att.content;
+        if (content.startsWith("data:")) {
+          const commaIndex = content.indexOf(",");
+          if (commaIndex !== -1) {
+            content = content.substring(commaIndex + 1);
+          }
+        }
+        return {
+          filename: att.filename,
+          content,
+          encoding: att.encoding || "base64",
+          contentType: att.contentType,
+        };
+      })
     };
 
     // 执行邮件发送
