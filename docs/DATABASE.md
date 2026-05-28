@@ -21,6 +21,7 @@ erDiagram
     User ||--o{ ApiKey : "创建"
     User ||--o{ EmailLog : "产生"
     User ||--o{ Proxy : "创建"
+    User ||--o{ AuthenticationLog : "产生"
     EmailAccount ||--o{ EmailLog : "发送"
     EmailAccount }o--o| Proxy : "使用代理"
     ApiKey ||--o{ EmailLog : "使用"
@@ -102,12 +103,13 @@ erDiagram
 
     AuthenticationLog {
         string id PK "日志唯一标识"
+        string userId FK "用户ID"
+        string email "认证邮箱"
         string apiKeyName "API密钥名称"
         string source "来源：API/SMTP"
-        string clientIp "客户端IP"
-        string userAgent "User-Agent"
         boolean success "是否成功"
-        string errorMessage "错误信息"
+        string error "错误信息"
+        string ipAddress "客户端IP"
         datetime createdAt "创建时间"
     }
 ```
@@ -359,19 +361,20 @@ model ApiKey {
 
 ### 5. AuthenticationLog 表（认证日志表）
 
-记录 API 密钥的认证日志，包括 SMTP 和 HTTP API 两种来源。
+记录用户的认证日志，包括 SMTP 和 HTTP API 两种来源。
 
 **表名**: `authentication_logs`
 
 | 字段名 | 类型 | 约束 | 默认值 | 说明 |
 |--------|------|------|--------|------|
 | id | String | PRIMARY KEY | cuid() | 日志唯一标识 |
-| apiKeyName | String | NULL | - | API 密钥名称（直接存储，无外键关联） |
+| userId | String | FOREIGN KEY, NOT NULL | - | 用户 ID |
+| email | String | NOT NULL | - | 认证使用的邮箱地址 |
+| apiKeyName | String | NULL | - | API 密钥名称（直接存储字符串，非外键） |
 | source | String | NOT NULL | "SMTP" | 认证来源：API/SMTP |
-| clientIp | String | NULL | - | 客户端 IP 地址 |
-| userAgent | String | NULL | - | 客户端 User-Agent |
 | success | Boolean | NOT NULL | false | 认证是否成功 |
-| errorMessage | String | NULL | - | 错误信息（失败时记录） |
+| error | String | NULL | - | 错误信息（失败时记录） |
+| ipAddress | String | NULL | - | 客户端 IP 地址 |
 | createdAt | DateTime | NOT NULL | now() | 创建时间 |
 
 **索引设计**
@@ -379,8 +382,13 @@ model ApiKey {
 | 索引名 | 字段 | 类型 | 说明 |
 |--------|------|------|------|
 | PRIMARY | id | 主键索引 | 主键查询 |
-| authentication_logs_apiKeyName_idx | apiKeyName | 普通索引 | 按密钥名称查询日志 |
-| authentication_logs_createdAt_idx | createdAt | 普通索引 | 按时间查询日志 |
+| authentication_logs_userId_createdAt_idx | userId, createdAt | 复合索引 | 按用户和时间范围查询日志 |
+
+**外键约束**
+
+| 字段 | 引用表 | 引用字段 | 删除行为 |
+|------|--------|----------|----------|
+| userId | users | id | CASCADE（级联删除） |
 
 **source 字段说明**
 
@@ -393,17 +401,18 @@ model ApiKey {
 
 ```prisma
 model AuthenticationLog {
-  id           String   @id @default(cuid())
+  id           String     @id @default(cuid())
+  userId       String
+  email        String
   apiKeyName   String?
-  source       String   @default("SMTP")
-  clientIp     String?
-  userAgent    String?
-  success      Boolean  @default(false)
-  errorMessage String?
-  createdAt    DateTime @default(now())
+  source       String     @default("SMTP")
+  success      Boolean    @default(false)
+  error        String?
+  ipAddress    String?
+  createdAt    DateTime   @default(now())
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([apiKeyName])
-  @@index([createdAt])
+  @@index([userId, createdAt])
   @@map("authentication_logs")
 }
 ```
@@ -560,21 +569,19 @@ model VerificationCode {
 │ lastUsedAt  │       │ status           │
 │ createdAt   │       │ error            │
 │ updatedAt   │       │ createdAt        │
-└─────────────┘       └──────────────────┘
-      │
-      ▼
-┌─────────────────────┐
-│  AuthenticationLog  │
-├─────────────────────┤
-│ id (PK)             │
-│ apiKeyName          │
-│ source              │
-│ clientIp            │
-│ userAgent           │
-│ success             │
-│ errorMessage        │
-│ createdAt           │
-└─────────────────────┘
+└─────────────┘       └──────────────────┘       ┌─────────────────────┐
+                                            │  AuthenticationLog  │
+                                           ├─────────────────────┤
+                                           │ id (PK)             │
+                                           │ userId (FK)         │
+                                           │ email               │
+                                           │ apiKeyName          │
+                                           │ source              │
+                                           │ success             │
+                                           │ error               │
+                                           │ ipAddress           │
+                                           │ createdAt           │
+                                           └─────────────────────┘
 
 ┌─────────────────────┐
 │  VerificationCode   │  （独立表，无外键关联）
@@ -597,6 +604,7 @@ model VerificationCode {
 | User → ApiKey | 一对多 | 一个用户可以创建多个 API 密钥 |
 | User → EmailLog | 一对多 | 一个用户可以有多条发送记录 |
 | User → Proxy | 一对多 | 一个用户可以创建多个代理配置 |
+| User → AuthenticationLog | 一对多 | 一个用户可以有多条认证日志 |
 | EmailAccount → EmailLog | 一对多 | 一个邮箱账户可以发送多封邮件 |
 | EmailAccount → Proxy | 多对一 | 多个邮箱账户可以共享一个代理（可选） |
 | ApiKey → EmailLog | 一对多 | 一个密钥可以用于多次发送 |

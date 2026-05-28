@@ -19,6 +19,9 @@
 - 通过 API 发送邮件（支持 HTML、附件、抄送等）
 - 通过 SMTP 协议发送邮件（支持标准 SMTP 客户端）
 - 邮件发送日志记录
+- 日志查询（邮件发送日志分页筛选 + 认证日志查看）
+- 双格式发送（JSON + multipart/form-data）
+- 附件上传（Base64 / Data URL / 文件直传）
 
 ---
 
@@ -88,7 +91,7 @@
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                    数据层 (SQLite/PostgreSQL)                 │
-│              User  EmailAccount  ApiKey  EmailLog            │
+│              User  EmailAccount  ApiKey  Proxy  EmailLog  AuthenticationLog │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -233,6 +236,9 @@ aggregation-email/
 │   │   │   │   ├── test/      # 测试代理连接
 │   │   │   │   └── [id]/      # 删除/更新/测试
 │   │   │   └── send/          # 发送邮件
+│   │   │   ├── logs/            # 日志查询
+│   │   │   ├── email/       # 邮件发送日志
+│   │   │   └── api/         # API 调用日志
 │   │   ├── api-keys/          # API 密钥管理页面
 │   │   ├── email-accounts/    # 邮箱管理页面
 │   │   ├── proxies/           # 代理管理页面
@@ -241,6 +247,7 @@ aggregation-email/
 │   │   ├── forgot-password/   # 忘记密码页面
 │   │   ├── reset-password/    # 重置密码页面
 │   │   ├── send-test/         # 发送测试页面
+│   │   ├── logs/            # 日志查看页面
 │   │   ├── globals.css        # 全局样式
 │   │   ├── layout.tsx         # 根布局
 │   │   └── page.tsx           # 首页
@@ -250,16 +257,19 @@ aggregation-email/
 │   │   ├── email-accounts/    # 邮箱管理组件
 │   │   ├── layout/            # 布局组件
 │   │   │   └── Footer.tsx     # 统一页脚组件
-│   │   └── send-test/         # 发送测试组件
+│   │   └── send-test/         # 发送测试组件（含文件上传）
 │   ├── lib/                   # 工具库
 │   │   ├── crypto.ts          # 加密工具
 │   │   ├── email.ts           # 邮件发送
 │   │   ├── proxy.ts           # 代理配置与测试
+│   │   ├── smtp-auth.ts     # 认证日志记录（AuthenticationLog）
+│   │   ├── smtp-mail-handler.ts # SMTP 邮件处理（含代理支持）
 │   │   ├── prisma.ts          # 数据库客户端
 │   │   ├── smtp.ts            # SMTP 验证
 │   │   └── site-smtp.ts       # 站点 SMTP 发信服务（验证码、密码重置）
 │   ├── middleware/            # 中间件
 │   │   ├── apiKeyAuth.ts      # API Key 认证
+│   │   ├── adminAuth.ts     # 管理员认证
 │   │   └── auth.ts            # JWT 认证
 │   └── types/                 # 类型定义
 │       └── index.ts
@@ -293,6 +303,18 @@ aggregation-email/
 - **HTTP**：使用 `https-proxy-agent` 处理 HTTP 代理
 - **HTTPS**：使用 `https-proxy-agent` 处理 HTTPS 代理
 - **SOCKS5**：使用 `socks-proxy-agent` 处理 SOCKS5 代理
+
+### smtp-auth.ts - 认证日志模块
+
+用于记录和管理认证日志（AuthenticationLog）：
+
+| 函数 | 说明 |
+|------|------|
+| logAuth() | 创建认证日志记录 |
+
+### smtp-mail-handler.ts - SMTP 邮件处理模块
+
+处理 SMTP 协议的邮件收发，包括认证、代理转发等。
 
 ### site-smtp.ts - 站点 SMTP 发信服务
 
@@ -332,6 +354,49 @@ aggregation-email/
 - **单个测试**：测试单个代理的连通性，显示延迟和错误信息
 - **批量测试**：一键测试所有代理，显示测试汇总结果
 - **表单内测试**：添加/编辑时可先测试代理配置是否可用
+
+---
+
+## 认证日志模块
+
+### 概述
+
+认证日志（AuthenticationLog）统一记录所有通过 API 和 SMTP 协议的认证请求，用于安全审计和问题追踪。
+
+### 模型变更（v1.3.0 重构）
+
+| 变更项 | 旧值 | 新值 |
+|--------|------|------|
+| 表名 | smtp_auth_logs | authentication_logs |
+| 模型名 | SmtpAuthLog | AuthenticationLog |
+| API Key 关联 | apiKeyId 外键 → ApiKey 表 | apiKeyName 字符串字段 |
+| 来源区分 | 无 | source 字段（SMTP/API） |
+
+### source 字段说明
+
+| 值 | 说明 |
+|----|------|
+| SMTP | 通过 SMTP 协议认证 |
+| API | 通过 HTTP API（/api/send）调用认证 |
+
+### apiKeyName 字段说明
+
+使用字符串存储 API 密钥名称而非外键引用，避免 API 密钥删除后导致日志无法关联的问题。
+
+### 认证日志记录时机
+
+- **SMTP**：每次 SMTP AUTH 请求时记录
+- **API**：每次 /api/send 请求结束时记录（无论成功或失败）
+- **失败场景**：权限不足、邮箱未绑定、邮箱不存在、密码解密失败等均记录为 failure 并附带错误信息
+
+### 相关文件
+
+| 文件 | 说明 |
+|------|------|
+| src/lib/smtp-auth.ts | 认证日志 CRUD 操作 |
+| src/middleware/apiKeyAuth.ts | API 认证中间件中的日志逻辑 |
+| src/app/api/smtp-mail-handler.ts | SMTP 认证中的日志记录 |
+| src/app/api/logs/api/ | API 日志查询接口 |
 
 ---
 

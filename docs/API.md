@@ -1262,11 +1262,11 @@ DELETE /api/api-keys/{id}
 
 ## 五、邮件发送 API
 
-> 此接口使用 API Key 认证
+> 此接口使用 API Key 认证，支持 **JSON** 和 **multipart/form-data** 两种请求格式
 
 ### 5.1 发送邮件
 
-通过 API 发送邮件。
+通过 API 发送邮件，接口会根据 `Content-Type` 自动识别请求格式。
 
 **请求**
 
@@ -1278,88 +1278,362 @@ POST /api/send
 
 | 参数 | 值 | 必填 |
 |------|-----|------|
-| Content-Type | application/json | 是 |
+| Content-Type | application/json **或** multipart/form-data | 是 |
 | Authorization | Bearer \<api-key\> | 是 |
 
-**请求体**
+---
 
-基础请求：
+#### 方式一：JSON 格式（application/json）
+
+适合程序化调用（JavaScript、Python、Java 等），所有字段以 JSON 结构传递。
+
+**请求体 - 基础请求（纯文本）**
 
 ```json
 {
   "from": "sender@example.com",
   "to": "recipient@example.com",
-  "subject": "邮件主题",
-  "text": "纯文本内容"
+  "subject": "测试邮件",
+  "text": "这是一封纯文本邮件"
 }
 ```
 
-完整请求：
+**请求体 - HTML 邮件**
+
+```json
+{
+  "from": "sender@example.com",
+  "to": "recipient@example.com",
+  "subject": "HTML 测试邮件",
+  "html": "<h1>Hello</h1><p>这是一封 <b>HTML</b> 格式的邮件</p>"
+}
+```
+
+**请求体 - 完整请求（含抄送、密送、附件）**
 
 ```json
 {
   "from": "sender@example.com",
   "to": ["recipient1@example.com", "recipient2@example.com"],
-  "subject": "邮件主题",
-  "html": "<h1>HTML 内容</h1><p>这是邮件正文</p>",
+  "subject": "完整功能演示",
+  "text": "纯文本备用内容",
+  "html": "<h1>完整功能</h1><p>这封邮件包含附件、抄送和密送</p>",
   "cc": "cc@example.com",
   "bcc": ["bcc1@example.com", "bcc2@example.com"],
   "attachments": [
     {
       "filename": "document.pdf",
-      "content": "base64-encoded-content",
+      "content": "JVBERi0xLjQKJeLjz9MKMSAwIG9iago8PA...",
       "contentType": "application/pdf"
+    },
+    {
+      "filename": "photo.png",
+      "content": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "contentType": "image/png"
     }
   ]
 }
 ```
 
+**请求体 - 含图片附件（Data URL 格式）**
+
+> 当 `content` 字段以 `data:` 开头时（如前端 Canvas 生成的 Data URL），系统会自动去除 `data:...base64,` 前缀，仅提取 Base64 数据部分。
+
+```json
+{
+  "from": "sender@example.com",
+  "to": "recipient@example.com",
+  "subject": "带图片的邮件",
+  "html": "<h1>见下图</h1><img src=\"cid:chart.png\" />",
+  "attachments": [
+    {
+      "filename": "chart.png",
+      "content": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "contentType": "image/png"
+    }
+  ]
+}
+```
+
+> **Data URL 处理说明**：系统检测到 `content` 以 `data:` 开头时，会自动截取第一个逗号 `,` 之后的内容作为实际的 Base64 数据。因此 `data:image/png;base64,xxxxx` 和纯 `xxxxx` 两种写法均有效。
+
+**字段说明**
+
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| from | string | 是 | 发件人邮箱（必须是已绑定的邮箱） |
-| to | string \| string[] | 是 | 收件人邮箱 |
+| from | string | 是 | 发件人邮箱（必须是已绑定的邮箱账户） |
+| to | string \| string[] | 是 | 收件人邮箱，多个收件人可用逗号分隔或传入数组 |
 | subject | string | 是 | 邮件主题 |
-| text | string | 否* | 纯文本内容 |
-| html | string | 否* | HTML 内容 |
-| cc | string \| string[] | 否 | 抄送 |
-| bcc | string \| string[] | 否 | 密送 |
-| attachments | array | 否 | 附件列表 |
+| text | string | 否* | 纯文本正文内容 |
+| html | string | 否* | HTML 正文内容 |
+| cc | string \| string[] | 否 | 抄送地址，多个可用逗号分隔或传入数组 |
+| bcc | string \| string[] | 否 | 密送地址，多个可用逗号分隔或传入数组 |
+| attachments | array | 否 | 附件列表（见下方附件对象说明） |
 
-> *`text` 和 `html` 至少提供一个
+> \* `text` 和 `html` 至少提供一个，可同时提供（作为富文本文本备用）
 
-**附件对象**
+**附件对象（JSON 格式）**
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| filename | string | 是 | 文件名 |
-| content | string | 是 | Base64 编码的文件内容 |
+| filename | string | 是 | 附件文件名（含扩展名） |
+| content | string | 是 | Base64 编码的文件内容，支持纯 Base64 或 Data URL 格式 |
 | encoding | string | 否 | 编码方式，默认 `base64` |
-| contentType | string | 否 | MIME 类型 |
+| contentType | string | 否 | MIME 类型，如 `image/png`、`application/pdf`。不传则根据 filename 推断 |
+
+**cURL 示例 - JSON 无附件**
+
+```bash
+curl -X POST http://localhost:3000/api/send \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer ea_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" \
+  -d '{
+    "from": "your-bound-email@gmail.com",
+    "to": "recipient@example.com",
+    "subject": "测试邮件",
+    "html": "<h1>Hello</h1><p>这是一封测试邮件</p>"
+  }'
+```
+
+**cURL 示例 - JSON 带附件**
+
+```bash
+curl -X POST http://localhost:3000/api/send \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer ea_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" \
+  -d '{
+    "from": "your-bound-email@gmail.com",
+    "to": "recipient@example.com",
+    "subject": "带附件的邮件",
+    "html": "<p>请查收附件</p>",
+    "attachments": [
+      {
+        "filename": "test.pdf",
+        "content": "'$(base64 -w 0 test.pdf)'",
+        "contentType": "application/pdf"
+      }
+    ]
+  }'
+```
+
+**JavaScript/TypeScript 示例**
+
+```javascript
+const API_BASE = 'http://localhost:3000/api';
+const API_KEY = 'ea_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx';
+
+async function sendEmail() {
+  const response = await fetch(`${API_BASE}/send`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${API_KEY}`
+    },
+    body: JSON.stringify({
+      from: 'your-bound-email@gmail.com',
+      to: 'recipient@example.com',
+      subject: '测试邮件',
+      html: '<h1>Hello</h1><p>这是一封测试邮件</p>',
+      attachments: [
+        {
+          filename: 'report.pdf',
+          content: Buffer.from(fs.readFileSync('report.pdf')).toString('base64'),
+          contentType: 'application/pdf'
+        }
+      ]
+    })
+  });
+  const result = await response.json();
+  console.log(result);
+}
+```
+
+**Python 示例**
+
+```python
+import requests
+import base64
+
+API_BASE = 'http://localhost:3000/api'
+API_KEY = 'ea_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+
+def send_email():
+    with open('report.pdf', 'rb') as f:
+        file_b64 = base64.b64encode(f.read()).decode()
+
+    response = requests.post(
+        f'{API_BASE}/send',
+        headers={
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {API_KEY}'
+        },
+        json={
+            'from': 'your-bound-email@gmail.com',
+            'to': 'recipient@example.com',
+            'subject': '带附件的邮件',
+            'html': '<p>请查收附件</p>',
+            'attachments': [{
+                'filename': 'report.pdf',
+                'content': file_b64,
+                'contentType': 'application/pdf'
+            }]
+        }
+    )
+    print(response.json())
+```
+
+---
+
+#### 方式二：multipart/form-data 格式
+
+适合通过命令行（curl）、表单提交等场景，文件以原生二进制流上传，无需手动 Base64 编码。
+
+**Content-Type**
+
+```
+multipart/form-data; boundary=----WebKitFormBoundary...
+```
+
+> 使用 curl 的 `-F` 参数时会自动设置正确的 Content-Type 和 boundary，**无需手动指定**。
+
+**字段说明**
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| from | text | 是 | 发件人邮箱（必须是已绑定的邮箱账户） |
+| to | text | 是 | 收件人邮箱，多个用英文逗号分隔 |
+| subject | text | 是 | 邮件主题 |
+| text | text | 否* | 纯文本正文内容 |
+| html | text | 否* | HTML 正文内容 |
+| cc | text | 否 | 抄送地址，多个用英文逗号分隔 |
+| bcc | text | 否 | 密送地址，多个用英文逗号分隔 |
+| attachments | file | 否 | 附件文件（可多次上传多个文件） |
+
+> \* `text` 和 `html` 至少提供一个
+
+**cURL 示例 - 纯文本邮件（无附件）**
+
+```bash
+curl -X POST http://localhost:3000/api/send \
+  -H "Authorization: Bearer ea_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" \
+  -F "from=your-bound-email@gmail.com" \
+  -F "to=recipient@example.com" \
+  -F "subject=测试邮件" \
+  -F "html=<h1>Hello</h1><p>这是一封测试邮件</p>"
+```
+
+**cURL 示例 - 带单个附件**
+
+```bash
+curl -X POST http://localhost:3000/api/send \
+  -H "Authorization: Bearer ea_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" \
+  -F "from=your-bound-email@gmail.com" \
+  -F "to=recipient@example.com" \
+  -F "subject=带附件的邮件" \
+  -F "html=<p>请查收附件</p>" \
+  -F "attachments=@./report.pdf"
+```
+
+**cURL 示例 - 带多个附件**
+
+```bash
+curl -X POST http://localhost:3000/api/send \
+  -H "Authorization: Bearer ea_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" \
+  -F "from=your-bound-email@gmail.com" \
+  -F "to=recipient@example.com" \
+  -F "subject=多附件邮件" \
+  -F "text=请查收以下附件" \
+  -F "attachments=@./report.pdf" \
+  -F "attachments=@./image.png" \
+  -F "attachments=@./data.csv"
+```
+
+**cURL 示例 - 含抄送、密送、多收件人**
+
+```bash
+curl -X POST http://localhost:3000/api/send \
+  -H "Authorization: Bearer ea_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" \
+  -F "from=your-bound-email@gmail.com" \
+  -F "to=recipient1@example.com,recipient2@example.com" \
+  -F "cc=cc@example.com" \
+  -F "bcc=bcc@example.com" \
+  -F "subject=完整功能测试" \
+  -F "html=<h1>完整功能</h1>" \
+  -F "attachments=@./doc.pdf"
+```
+
+**cURL 示例 - 从文件读取 HTML 内容**
+
+```bash
+curl -X POST http://localhost:3000/api/send \
+  -H "Authorization: Bearer ea_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" \
+  -F "from=your-bound-email@gmail.com" \
+  -F "to=recipient@example.com" \
+  -F "subject=邮件通知" \
+  -F "html=@./email-template.html" \
+  -F "attachments=@./attachment.zip"
+```
+
+> 使用 `@./filename` 语法时，curl 会读取本地文件内容作为字段值。对于 `attachments` 字段，文件会以二进制流形式上传；对于 `html`/`text` 字段，文件内容会被当作字符串读取。
+
+---
+
+#### 两种方式对比
+
+| 特性 | JSON (application/json) | form-data (multipart/form-data) |
+|------|------------------------|-------------------------------|
+| 适用场景 | 应用程序集成、前后端联调 | 命令行测试、脚本调用、表单提交 |
+| 附件处理 | 需手动 Base64 编码后放入 JSON | 文件直接上传，自动处理 |
+| 大文件传输 | Base64 使体积增约 33% | 原始二进制，更高效 |
+| 多附件 | 数组内多个对象 | 多个同名 `attachments` 字段 |
+| 图片来源 | Base64 字符串 / Data URL | 本地文件路径 (`@./file`) |
+| Content-Type | 必须 `application/json` | curl 用 `-F` 时自动设置 |
+
+---
+
+#### 通用响应格式
 
 **成功响应** (200)
 
 ```json
 {
   "success": true,
-  "messageId": "<xxx@xxx.com>",
+  "messageId": "<abc123@smtp.gmail.com>",
   "message": "邮件发送成功"
 }
 ```
 
-**错误响应**
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| success | boolean | 是否发送成功 |
+| messageId | string | SMTP 服务器返回的消息 ID |
+| message | string | 结果描述 |
 
-| 状态码 | 错误信息 | 说明 |
-|--------|----------|------|
-| 400 | 缺少必填字段：from, to, subject | 缺少必要参数 |
-| 400 | 邮件内容不能为空，请提供 text 或 html | 未提供邮件内容 |
+**失败响应**
+
+```json
+{
+  "success": false,
+  "error": "错误原因描述"
+}
+```
+
+**错误响应汇总**
+
+| 状态码 | 错误信息 | 触发条件 |
+|--------|----------|----------|
+| 400 | 缺少必填字段：from, to, subject | 未提供必要参数 |
+| 400 | 邮件内容不能为空，请提供 text 或 html | 未提供邮件正文 |
 | 401 | 缺少 API 密钥 | 未提供 Authorization 头 |
-| 401 | 无效的 API 密钥格式 | 密钥格式错误 |
-| 401 | API 密钥不存在或已失效 | 密钥无效 |
-| 403 | 该 API 密钥无权使用此邮箱账户发送邮件 | 权限不足 |
-| 403 | 发件人邮箱未绑定或不存在 | 邮箱未绑定 |
-| 404 | 邮箱账户不存在 | 邮箱账户被删除 |
-| 500 | 邮箱账户密码解密失败 | 配置错误 |
-| 500 | 发送邮件时发生错误 | SMTP 发送失败 |
+| 401 | 无效的 API 密钥格式 | 密钥不以 `ea_live_` 开头 |
+| 401 | API 密钥不存在或已失效 | 密钥无效或用户被禁用 |
+| 403 | 该 API 密钥无权使用此邮箱账户发送邮件 | 权限不足（SPECIFIC scope 未授权该邮箱） |
+| 403 | 发件人邮箱未绑定或不存在 | from 对应的邮箱未绑定到当前用户 |
+| 404 | 邮箱账户不存在 | 邮箱记录已被删除 |
+| 500 | 邮箱账户密码解密失败，请重新绑定邮箱 | 配置损坏 |
+| 500 | 发送邮件时发生错误 | SMTP 连接/发送异常（含具体错误信息） |
+
+> 每次请求（无论成功或失败）都会记录一条认证日志（AuthenticationLog），source 为 `API`，可通过日志页面查看调用历史。
 
 ---
 
@@ -1485,7 +1759,7 @@ curl -X POST http://localhost:3000/api/email-accounts \
   }'
 ```
 
-**发送邮件**
+**发送邮件（JSON 方式）**
 
 ```bash
 curl -X POST http://localhost:3000/api/send \
@@ -1497,6 +1771,18 @@ curl -X POST http://localhost:3000/api/send \
     "subject": "测试邮件",
     "html": "<h1>Hello</h1><p>这是一封测试邮件</p>"
   }'
+```
+
+**发送邮件（form-data 方式，带附件）**
+
+```bash
+curl -X POST http://localhost:3000/api/send \
+  -H "Authorization: Bearer ea_live_xxx" \
+  -F "from=user@gmail.com" \
+  -F "to=recipient@example.com" \
+  -F "subject=带附件的测试邮件" \
+  -F "html=<h1>Hello</h1><p>请查收附件</p>" \
+  -F "attachments=@./report.pdf"
 ```
 
 ### JavaScript 示例

@@ -21,7 +21,8 @@
 |------|----------|
 | Node.js | 18.x 或更高 |
 | npm/yarn/pnpm | 最新稳定版 |
-| PostgreSQL | 14.x 或更高（可选） |
+| PostgreSQL | 14.x 或更高（可选，生产推荐） |
+| MySQL | 8.x 或更高（可选） |
 | Nginx | 1.18+（可选） |
 | Docker | 20.x+（可选） |
 
@@ -34,7 +35,15 @@
 创建 `.env` 文件或配置系统环境变量：
 
 ```env
-DATABASE_URL="postgresql://user:password@localhost:5432/aggregation_email"
+```env
+# SQLite（开发）
+DATABASE_URL="file:./dev.db"
+
+# PostgreSQL（生产推荐）
+# DATABASE_URL="postgresql://user:password@localhost:5432/aggregation_email"
+
+# MySQL
+# DATABASE_URL="mysql://user:password@localhost:3306/aggregation_email"
 JWT_SECRET="your-super-secret-jwt-key-at-least-32-characters-long"
 ENCRYPTION_KEY="your-32-character-encryption-key"
 ```
@@ -189,13 +198,23 @@ GRANT ALL PRIVILEGES ON DATABASE aggregation_email TO aggregation_user;
 \q
 ```
 
+```bash
+# MySQL（如果使用 MySQL）
+mysql -u root -p
+CREATE DATABASE aggregation_email;
+CREATE USER 'aggregation_user'@'localhost' IDENTIFIED BY 'your_secure_password';
+GRANT ALL PRIVILEGES ON aggregation_email.* TO 'aggregation_user'@'localhost';
+FLUSH PRIVILEGES;
+\q
+```
+
 ### 步骤 3：修改 Prisma 配置
 
 编辑 `prisma/schema.prisma`：
 
 ```prisma
 datasource db {
-  provider = "postgresql"
+  provider = "postgresql"  // 可选: "sqlite" | "mysql" | "postgresql"
   url      = env("DATABASE_URL")
 }
 ```

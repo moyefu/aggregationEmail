@@ -387,6 +387,92 @@ aggregation-email 是一个邮件聚合发送平台，让您能够：
 
 ---
 
+### 两种请求格式
+
+接口同时支持 **JSON** 和 **multipart/form-data** 两种格式：
+
+| 特性 | JSON (application/json) | form-data (multipart/form-data) |
+|------|------------------------|-------------------------------|
+| 适用场景 | 应用程序集成、前后端联调 | 命令行测试、脚本调用、表单提交 |
+| 附件处理 | 需手动 Base64 编码后放入 JSON | 文件直接上传，无需编码 |
+| Content-Type | 必须 application/json | 使用 -F 参数时自动设置 |
+
+---
+
+### 方式一：JSON 格式（原有内容保留不变）
+
+> 以下是 JSON 格式的示例
+
+---
+
+### 方式二：multipart/form-data 格式
+
+> 此格式适合通过 curl 命令行发送邮件，文件以原始二进制流上传。
+
+#### 纯文本邮件
+
+```bash
+curl -X POST https://your-domain.com/api/send \
+  -H "Authorization: Bearer ea_live_your_api_key_here" \
+  -F "from=sender@gmail.com" \
+  -F "to=recipient@example.com" \
+  -F "subject=测试邮件" \
+  -F "html=<h1>Hello</h1><p>这是一封测试邮件</p>"
+```
+
+#### 带单个附件
+
+```bash
+curl -X POST https://your-domain.com/api/send \
+  -H "Authorization: Bearer ea_live_your_api_key_here" \
+  -F "from=sender@gmail.com" \
+  -F "to=recipient@example.com" \
+  -F "subject=带附件的邮件" \
+  -F "html=<p>请查收附件</p>" \
+  -F "attachments=@./document.pdf"
+```
+
+#### 带多个附件
+
+```bash
+curl -X POST https://your-domain.com/api/send \
+  -H "Authorization: Bearer ea_live_your_api_key_here" \
+  -F "from=sender@gmail.com" \
+  -F "to=recipient@example.com" \
+  -F "subject=多附件邮件" \
+  -F "text=请查收以下附件" \
+  -F "attachments=@./report.pdf" \
+  -F "attachments=@./image.png"
+```
+
+#### 含抄送/密送
+
+```bash
+curl -X POST https://your-domain.com/api/send \
+  -H "Authorization: Bearer ea_live_your_api_key_here" \
+  -F "from=sender@gmail.com" \
+  -F "to=recipient1@example.com,recipient2@example.com" \
+  -F "cc=cc@example.com" \
+  -F "bcc=bcc@example.com" \
+  -F "subject=完整功能测试" \
+  -F "html=<h1>完整功能</h1>" \
+  -F "attachments=@./doc.pdf"
+```
+
+#### 从文件读取 HTML 内容
+
+```bash
+curl -X POST https://your-domain.com/api/send \
+  -H "Authorization: Bearer ea_live_your_api_key_here" \
+  -F "from=sender@gmail.com" \
+  -F "to=recipient@example.com" \
+  -F "subject=邮件通知" \
+  -F "html=@./email-template.html" \
+  -F "attachments=@./attachment.zip"
+```
+
+---
+
 ### cURL 示例
 
 **发送纯文本邮件**
@@ -1025,8 +1111,32 @@ const emailData = {
     content: base64Content,
     contentType: 'application/pdf'
   }]
-};
+};}];
 ```
+
+### Data URL 附件格式
+
+当使用 JSON 格式发送图片类附件时，前端 Canvas 生成的 Data URL 可以直接作为 `content` 字段传入：
+
+```json
+{
+  "from": "sender@gmail.com",
+  "to": "recipient@example.com",
+  "subject": "带图片的邮件",
+  "html": "<h1>见下图</h1><img src=\"cid:chart.png\" />",
+  "attachments": [
+    {
+      "filename": "chart.png",
+      "content": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAE...",
+      "contentType": "image/png"
+    }
+  ]
+}
+```
+
+系统会自动检测 `content` 以 `data:` 开头的情况，剥离 `data:...base64,` 前缀，仅提取 Base64 数据部分。因此以下两种写法均有效：
+- `"content": "data:image/png;base64,iVBORw0KGgo..."` — Data URL 格式
+- `"content": "iVBORw0KGgo..."` — 纯 Base64 格式
 
 ### Q7: 邮件发送成功但收件人没收到？
 
@@ -1061,9 +1171,21 @@ for (const to of recipients) {
 2. 在「安全性」设置中生成「应用专用密码」
 3. 使用生成的 16 位密码作为 SMTP 密码
 
-### Q10: 如何查看邮件发送记录？
+### Q10: 如何查看邮件发送记录和 API 调用日志？
 
-目前系统会记录所有邮件发送日志。后续版本将提供日志查询界面。
+登录后访问「日志」页面（导航栏或 /logs），可以查看：
+
+**邮件发送日志**
+- 分页浏览所有邮件发送记录
+- 按时间范围筛选（选择起止日期）
+- 按邮箱账户筛选（下拉选择特定邮箱）
+- 按发送状态筛选（成功/失败）
+- 显示信息：收件人、主题、状态、时间
+
+**API 调用认证日志**
+- 显示最近 10 条 API/SMTP 认证记录
+- 包含信息：来源（API 或 SMTP）、邮箱地址、API 密钥名称、IP 地址、状态、时间
+- 失败记录会显示具体错误原因
 
 ---
 
@@ -1079,14 +1201,16 @@ for (const to of recipients) {
 
 ## 更新日志
 
-### v1.3.0（当前版本）
+### v1.4.0（当前版本）
 
-- 新增代理管理功能
-- 支持添加、编辑、删除代理配置
-- 支持 HTTP、HTTPS、SOCKS5 代理协议
-- 新增代理连通性测试功能（单个测试、全部测试）
-- 邮箱账户可关联代理，发送邮件时自动使用代理转发
-- 优化发送日志显示代理信息
+- 发送接口支持 multipart/form-data 格式（文件直传上传）
+- JSON 附件支持 Data URL 格式自动识别
+- 发送测试页面改造（文件选择器 + FormData 发送 + 三选项卡使用说明）
+- JSON 解析失败返回明确报错（400 + 具体错误信息）
+- 用户日志查看功能（邮件发送日志分页筛选 + API 调用日志最新 10 条）
+- 认证日志重构（AuthenticationLog，source 字段区分 API/SMTP）
+- API 鉴权失败正确记录（权限不足/邮箱未绑定等均记录为失败）
+- 代理管理功能（HTTP/HTTPS/SOCKS5 代理，邮箱可绑定独立代理）
 
 ### v1.2.0
 
